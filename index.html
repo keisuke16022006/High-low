@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>HIGH & LOW</title>
+<style>
+  :root {
+    --bg: #1a2a4a;
+    --surface: #0f1e38;
+    --panel: #162040;
+    --border: #2a4a7a;
+    --text: #ffffff;
+    --muted: #7a9cc0;
+    --p1: #4fc3f7;
+    --p2: #ff8a65;
+    --high: #ff5252;
+    --low: #69f0ae;
+    --correct: #ffd740;
+    --key-bg: #1e3560;
+    --key-active: #2a4a80;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow: hidden;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+
+  .screen { display: none; width: 100%; height: 100vh; flex-direction: column; }
+  .screen.active { display: flex; animation: fadeUp 0.2s ease; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ===== タイトル ===== */
+  #screen-title {
+    align-items: center;
+    justify-content: center;
+    gap: 48px;
+    background: var(--surface);
+  }
+
+  .title-wrap { text-align: center; }
+  .title-main { font-size: 48px; font-weight: 900; letter-spacing: 2px; color: var(--p1); }
+  .title-low  { color: var(--p2); }
+  .title-amp  { font-size: 24px; color: var(--muted); margin: 0 4px; }
+  .title-sub  { font-size: 11px; letter-spacing: 4px; color: var(--muted); margin-top: 6px; }
+
+  .btn-group { display: flex; flex-direction: column; gap: 12px; width: 100%; padding: 0 24px; }
+
+  .main-btn {
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    cursor: pointer;
+  }
+  .main-btn.primary { background: var(--p1); color: #000; }
+  .main-btn.secondary { background: var(--key-bg); color: var(--text); border: 1px solid var(--border); }
+
+  /* ===== ルーム参加 ===== */
+  #screen-join {
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    background: var(--surface);
+    padding: 0 24px;
+  }
+
+  .join-title { font-size: 22px; font-weight: 700; text-align: center; }
+  .join-desc  { font-size: 13px; color: var(--muted); text-align: center; }
+
+  .room-display {
+    font-size: 52px;
+    font-weight: 900;
+    letter-spacing: 8px;
+    color: var(--p1);
+    text-align: center;
+    min-height: 64px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ===== 待機 ===== */
+  #screen-wait {
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    background: var(--surface);
+    padding: 0 24px;
+    text-align: center;
+  }
+
+  .room-code-display {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 32px;
+    width: 100%;
+  }
+  .room-code-label { font-size: 11px; color: var(--muted); letter-spacing: 3px; margin-bottom: 8px; }
+  .room-code-num   { font-size: 56px; font-weight: 900; letter-spacing: 8px; color: var(--correct); }
+
+  .waiting-text { font-size: 14px; color: var(--muted); }
+  .dots { display: inline-block; animation: dots 1.5s infinite; }
+  @keyframes dots {
+    0%  { content: '.'; }
+    33% { content: '..'; }
+    66% { content: '...'; }
+  }
+
+  /* ===== 数字設定 ===== */
+  #screen-setup {
+    background: var(--surface);
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 0 24px;
+  }
+
+  .setup-title { font-size: 20px; font-weight: 700; text-align: center; }
+  .setup-desc  { font-size: 12px; color: var(--muted); text-align: center; }
+
+  .setup-number-display {
+    font-size: 88px;
+    font-weight: 900;
+    letter-spacing: -4px;
+    color: var(--p1);
+    text-align: center;
+    min-height: 100px;
+    line-height: 1;
+  }
+
+  .confirm-btn {
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    cursor: pointer;
+    background: var(--p1);
+    color: #000;
+  }
+  .confirm-btn:disabled { opacity: 0.4; }
+
+  /* ===== バトル ===== */
+  #screen-battle { background: var(--bg); }
+
+  .battle-top {
+    display: flex;
+    background: var(--surface);
+    border-bottom: 2px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .player-header {
+    flex: 1;
+    padding: 12px 8px;
+    text-align: center;
+  }
+  .player-header + .player-header { border-left: 1px solid var(--border); }
+
+  .player-name   { font-size: 11px; letter-spacing: 2px; color: var(--muted); margin-bottom: 4px; }
+  .player-number { font-size: 32px; font-weight: 900; letter-spacing: -1px; line-height: 1; }
+  .player-number.hidden { color: var(--muted); letter-spacing: 2px; font-size: 20px; }
+
+  .history-wrap { flex: 1; display: flex; overflow: hidden; }
+
+  .history-col {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .history-col + .history-col { border-left: 1px solid var(--border); }
+
+  .history-header {
+    display: flex;
+    justify-content: space-between;
+    padding: 2px 6px 4px;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .hist-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: var(--panel);
+    animation: slideIn 0.15s ease;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .hist-row.mine   { border-left: 2px solid var(--p1); }
+  .hist-row.theirs { border-left: 2px solid var(--p2); }
+
+  .hist-num { font-weight: 800; font-size: 16px; min-width: 28px; }
+  .hist-tag {
+    font-size: 10px; font-weight: 700;
+    padding: 2px 6px; border-radius: 4px; letter-spacing: 1px;
+  }
+  .hist-tag.high { background: rgba(255,82,82,0.2);   color: var(--high); }
+  .hist-tag.low  { background: rgba(105,240,174,0.2); color: var(--low); }
+  .hist-tag.hit  { background: rgba(255,215,64,0.25); color: var(--correct); }
+
+  .turn-bar {
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 16px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    flex-shrink: 0;
+  }
+  .turn-bar.mine   { color: var(--p1); }
+  .turn-bar.theirs { color: var(--muted); }
+
+  .battle-input {
+    background: var(--surface);
+    padding: 10px 12px 4px;
+    flex-shrink: 0;
+  }
+
+  .input-number {
+    font-size: 36px; font-weight: 900;
+    text-align: center; letter-spacing: -1px;
+    min-height: 44px; color: var(--text); margin-bottom: 6px;
+  }
+  .cursor {
+    display: inline-block; width: 3px; height: 32px;
+    background: var(--text); vertical-align: middle;
+    animation: blink 1s step-end infinite; margin-left: 2px;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .keypad {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 5px;
+  }
+
+  .key {
+    background: var(--key-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 4px;
+    font-size: 18px; font-weight: 700;
+    color: var(--text); text-align: center;
+    cursor: pointer; transition: background 0.1s;
+  }
+  .key:active { background: var(--key-active); }
+  .key.del    { font-size: 14px; color: var(--muted); }
+  .key.submit { grid-column: span 2; font-size: 13px; font-weight: 800; letter-spacing: 1px; }
+  .key.submit.active { background: var(--p1); color: #000; border-color: var(--p1); }
+  .key.submit.disabled { opacity: 0.3; }
+
+  /* ===== 結果 ===== */
+  #screen-result {
+    background: var(--surface);
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    padding: 0 24px;
+    text-align: center;
+  }
+
+  .result-emoji { font-size: 64px; }
+  .result-title { font-size: 26px; font-weight: 900; }
+  .result-sub   { font-size: 13px; color: var(--muted); }
+
+  .result-panel {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .result-row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+  .result-row .label { color: var(--muted); }
+  .result-row .val   { font-weight: 800; font-size: 18px; }
+
+  .replay-btn {
+    width: 100%; padding: 16px;
+    background: var(--p1); color: #000;
+    border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 800; letter-spacing: 2px; cursor: pointer;
+  }
+
+  /* エラー */
+  .error-msg { color: var(--high); font-size: 12px; text-align: center; min-height: 16px; }
+</style>
+</head>
+<body>
+
+<!-- タイトル -->
+<div class="screen active" id="screen-title">
+  <div class="title-wrap">
+    <div class="title-main">HIGH<span class="title-amp"> & </span><span class="title-low">LOW</span></div>
+    <div class="title-sub">NUMBER BATTLE</div>
+  </div>
+  <div class="btn-group">
+    <button class="main-btn primary" onclick="createRoom()">ルームを作る</button>
+    <button class="main-btn secondary" onclick="showJoin()">ルームに参加する</button>
+  </div>
+</div>
+
+<!-- ルーム参加 -->
+<div class="screen" id="screen-join">
+  <div class="join-title">ルームコードを入力</div>
+  <div class="join-desc">相手が作ったルームコードを入力してください</div>
+  <div class="room-display" id="join-display">—</div>
+  <div class="keypad" id="join-keypad"></div>
+  <div class="error-msg" id="join-error"></div>
+  <button class="main-btn secondary" onclick="showScreen('screen-title')" style="margin-top:4px;">戻る</button>
+</div>
+
+<!-- 待機（ルームコード表示） -->
+<div class="screen" id="screen-wait">
+  <div style="font-size:20px;font-weight:700;">相手を待っています</div>
+  <div class="room-code-display">
+    <div class="room-code-label">ROOM CODE</div>
+    <div class="room-code-num" id="wait-code">—</div>
+  </div>
+  <div class="waiting-text">このコードを相手に伝えてください<br><span class="dots">...</span></div>
+</div>
+
+<!-- 数字設定 -->
+<div class="screen" id="screen-setup">
+  <div class="setup-title">秘密の数字を決めてください</div>
+  <div class="setup-desc">1〜100 の中から1つ。相手には見せないでください。</div>
+  <div class="setup-number-display" id="setup-display">—</div>
+  <div class="keypad" id="setup-keypad"></div>
+  <button class="confirm-btn" id="setup-confirm" onclick="confirmSecret()" disabled>この数字で決定</button>
+</div>
+
+<!-- バトル -->
+<div class="screen" id="screen-battle">
+  <div class="battle-top">
+    <div class="player-header">
+      <div class="player-name">あなた</div>
+      <div class="player-number" id="my-number-display">—</div>
+    </div>
+    <div class="player-header">
+      <div class="player-name">相手</div>
+      <div class="player-number hidden">? ? ?</div>
+    </div>
+  </div>
+
+  <div class="history-wrap">
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+      <div class="history-header"><span>あなたの予想</span><span>結果</span></div>
+      <div class="history-col" id="hist-mine"></div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+      <div class="history-header"><span>相手の予想</span><span>結果</span></div>
+      <div class="history-col" id="hist-theirs"></div>
+    </div>
+  </div>
+
+  <div class="turn-bar" id="turn-bar">相手のターン</div>
+
+  <div class="battle-input">
+    <div class="input-number" id="battle-display"><span class="cursor"></span></div>
+    <div class="keypad" id="battle-keypad"></div>
+  </div>
+</div>
+
+<!-- 結果 -->
+<div class="screen" id="screen-result">
+  <div class="result-emoji" id="result-emoji">🏆</div>
+  <div>
+    <div class="result-title" id="result-title"></div>
+    <div class="result-sub"  id="result-sub"></div>
+  </div>
+  <div class="result-panel">
+    <div class="result-row">
+      <span class="label">あなたの数字</span>
+      <span class="val" style="color:var(--p1)" id="res-mine"></span>
+    </div>
+    <div class="result-row">
+      <span class="label">相手の数字</span>
+      <span class="val" style="color:var(--p2)" id="res-theirs"></span>
+    </div>
+    <div class="result-row">
+      <span class="label">総ターン数</span>
+      <span class="val" id="res-turn"></span>
+    </div>
+  </div>
+  <button class="replay-btn" onclick="resetGame()">タイトルへ戻る</button>
+</div>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, get, onValue, update, remove }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCFMEo9NzZHaKglJVTgl0UsNYgMZJAxYyc",
+  authDomain: "high-or-low-9d492.firebaseapp.com",
+  databaseURL: "https://high-or-low-9d492-default-rtdb.firebaseio.com",
+  projectId: "high-or-low-9d492",
+  storageBucket: "high-or-low-9d492.firebasestorage.app",
+  messagingSenderId: "200585841433",
+  appId: "1:200585841433:web:8a6469dda6a461d640d388"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+// ===== 状態 =====
+let myRole    = ''; // 'p1' or 'p2'
+let roomCode  = '';
+let mySecret  = 0;
+let myTurn    = false;
+let turnCount = 1;
+let inputBuf  = '';
+let listeners = [];
+let gameOver  = false;
+
+// ===== 画面遷移 =====
+window.showScreen = (id) => {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+};
+
+// ===== ルーム作成 =====
+window.createRoom = async () => {
+  const code = Math.floor(1000 + Math.random() * 9000).toString();
+  roomCode = code;
+  myRole   = 'p1';
+
+  await set(ref(db, `rooms/${code}`), {
+    p1Ready: false, p2Ready: false,
+    p1Secret: 0,    p2Secret: 0,
+    currentTurn: 'p1',
+    turnCount: 1,
+    status: 'waiting',
+    winner: '',
+    guesses: { p1: [], p2: [] }
+  });
+
+  document.getElementById('wait-code').textContent = code;
+  showScreen('screen-wait');
+
+  // 相手が入るのを待つ
+  const unsubscribe = onValue(ref(db, `rooms/${code}/status`), snap => {
+    if (snap.val() === 'setup') {
+      unsubscribe();
+      showSetup();
+    }
+  });
+};
+
+// ===== ルーム参加画面 =====
+window.showJoin = () => {
+  inputBuf = '';
+  document.getElementById('join-display').textContent = '—';
+  document.getElementById('join-error').textContent = '';
+  buildKeypad('join-keypad', joinKey);
+  showScreen('screen-join');
+};
+
+function joinKey(key) {
+  if (key === 'DEL') {
+    inputBuf = inputBuf.slice(0, -1);
+  } else if (key === 'JOIN') {
+    joinRoom();
+    return;
+  } else {
+    if (inputBuf.length >= 4) return;
+    inputBuf += key;
+  }
+  document.getElementById('join-display').textContent = inputBuf || '—';
+}
+
+window.joinRoom = async () => {
+  const code = inputBuf;
+  if (code.length !== 4) {
+    document.getElementById('join-error').textContent = '4桁のコードを入力してください';
+    return;
+  }
+  const snap = await get(ref(db, `rooms/${code}`));
+  if (!snap.exists()) {
+    document.getElementById('join-error').textContent = 'ルームが見つかりません';
+    return;
+  }
+  if (snap.val().status !== 'waiting') {
+    document.getElementById('join-error').textContent = 'このルームは参加できません';
+    return;
+  }
+
+  roomCode = code;
+  myRole   = 'p2';
+  await update(ref(db, `rooms/${code}`), { status: 'setup' });
+  showSetup();
+};
+
+// ===== 数字設定 =====
+function showSetup() {
+  inputBuf = '';
+  document.getElementById('setup-display').textContent = '—';
+  document.getElementById('setup-confirm').disabled = true;
+  buildKeypad('setup-keypad', setupKey);
+  showScreen('screen-setup');
+}
+
+function setupKey(key) {
+  if (key === 'DEL') {
+    inputBuf = inputBuf.slice(0, -1);
+  } else {
+    if (inputBuf.length >= 3) return;
+    inputBuf += key;
+  }
+  const num = parseInt(inputBuf) || 0;
+  document.getElementById('setup-display').textContent = inputBuf || '—';
+  document.getElementById('setup-confirm').disabled = !(num >= 1 && num <= 100);
+}
+
+window.confirmSecret = async () => {
+  const num = parseInt(inputBuf);
+  if (num < 1 || num > 100) return;
+  mySecret = num;
+
+  document.getElementById('my-number-display').textContent = mySecret;
+  await update(ref(db, `rooms/${roomCode}`), {
+    [`${myRole}Secret`]: num,
+    [`${myRole}Ready`]: true,
+  });
+
+  // 両者準備完了を待つ
+  const unsubscribe = onValue(ref(db, `rooms/${roomCode}`), snap => {
+    const d = snap.val();
+    if (d && d.p1Ready && d.p2Ready) {
+      unsubscribe();
+      startBattle();
+    }
+  });
+
+  // 待機中はボタンを無効化
+  document.getElementById('setup-confirm').disabled = true;
+  document.getElementById('setup-confirm').textContent = '相手を待っています...';
+};
+
+// ===== バトル =====
+function startBattle() {
+  gameOver  = false;
+  turnCount = 1;
+  inputBuf  = '';
+  document.getElementById('hist-mine').innerHTML   = '';
+  document.getElementById('hist-theirs').innerHTML = '';
+  buildBattleKeypad();
+  showScreen('screen-battle');
+  listenBattle();
+}
+
+function listenBattle() {
+  // ターン監視
+  const unsubTurn = onValue(ref(db, `rooms/${roomCode}/currentTurn`), snap => {
+    if (gameOver) return;
+    myTurn = snap.val() === myRole;
+    updateTurnUI();
+  });
+
+  // ターン数監視
+  const unsubCount = onValue(ref(db, `rooms/${roomCode}/turnCount`), snap => {
+    if (snap.val()) turnCount = snap.val();
+  });
+
+  // 予想履歴監視（相手の予想が来たら表示）
+  const opponent = myRole === 'p1' ? 'p2' : 'p1';
+  const unsubGuess = onValue(ref(db, `rooms/${roomCode}/guesses/${opponent}`), snap => {
+    if (gameOver) return;
+    const guesses = snap.val() || [];
+    const col = document.getElementById('hist-theirs');
+    col.innerHTML = '';
+    guesses.forEach(g => addHistRow(col, g.num, g.tag, 'theirs'));
+  });
+
+  // 勝者監視
+  const unsubWinner = onValue(ref(db, `rooms/${roomCode}/winner`), snap => {
+    if (!snap.val() || gameOver) return;
+    gameOver = true;
+    const winner = snap.val();
+    const iWon = winner === myRole;
+
+    get(ref(db, `rooms/${roomCode}`)).then(s => {
+      const d = s.val();
+      const myNum    = myRole === 'p1' ? d.p1Secret : d.p2Secret;
+      const theirNum = myRole === 'p1' ? d.p2Secret : d.p1Secret;
+      showResult(iWon, myNum, theirNum, d.turnCount);
+    });
+  });
+
+  listeners = [unsubTurn, unsubCount, unsubGuess, unsubWinner];
+}
+
+function updateTurnUI() {
+  const bar = document.getElementById('turn-bar');
+  if (myTurn) {
+    bar.textContent = 'あなたのターン';
+    bar.className = 'turn-bar mine';
+  } else {
+    bar.textContent = '相手のターン...';
+    bar.className = 'turn-bar theirs';
+  }
+  buildBattleKeypad();
+}
+
+function buildBattleKeypad() {
+  const container = document.getElementById('battle-keypad');
+  container.innerHTML = '';
+  inputBuf = '';
+  document.getElementById('battle-display').innerHTML = '<span class="cursor"></span>';
+
+  const keys = ['1','2','3','4','5','6','7','8','9','0','DEL'];
+  keys.forEach(k => {
+    const btn = document.createElement('div');
+    btn.className = 'key' + (k === 'DEL' ? ' del' : '');
+    btn.textContent = k;
+    if (myTurn) {
+      btn.addEventListener('click', () => battleKey(k));
+    } else {
+      btn.style.opacity = '0.4';
+    }
+    container.appendChild(btn);
+  });
+
+  const submit = document.createElement('div');
+  submit.className = `key submit ${myTurn ? 'active' : 'disabled'}`;
+  submit.textContent = myTurn ? '予想する' : '相手のターン';
+  submit.id = 'submit-key';
+  if (myTurn) submit.addEventListener('click', makeGuess);
+  container.appendChild(submit);
+}
+
+function battleKey(key) {
+  if (!myTurn) return;
+  if (key === 'DEL') {
+    inputBuf = inputBuf.slice(0, -1);
+  } else {
+    if (inputBuf.length >= 3) return;
+    inputBuf += key;
+  }
+  const d = document.getElementById('battle-display');
+  d.innerHTML = (inputBuf || '') + '<span class="cursor"></span>';
+}
+
+async function makeGuess() {
+  if (!myTurn || gameOver) return;
+  const guess = parseInt(inputBuf);
+  if (!guess || guess < 1 || guess > 100) return;
+
+  const opponent = myRole === 'p1' ? 'p2' : 'p1';
+  const snap = await get(ref(db, `rooms/${roomCode}/${opponent}Secret`));
+  const theirSecret = snap.val();
+
+  let tag;
+  if (guess === theirSecret)    tag = 'hit';
+  else if (guess > theirSecret) tag = 'low';
+  else                          tag = 'high';
+
+  // 自分の履歴に追加
+  const myCol = document.getElementById('hist-mine');
+  addHistRow(myCol, guess, tag, 'mine');
+
+  // Firebaseに予想を書き込む
+  const guessSnap = await get(ref(db, `rooms/${roomCode}/guesses/${myRole}`));
+  const guesses = guessSnap.val() || [];
+  guesses.push({ num: guess, tag });
+  await update(ref(db, `rooms/${roomCode}`), {
+    [`guesses/${myRole}`]: guesses,
+  });
+
+  if (tag === 'hit') {
+    // 勝利
+    await update(ref(db, `rooms/${roomCode}`), {
+      winner: myRole,
+      turnCount,
+    });
+    return;
+  }
+
+  // ターン交代
+  const nextTurn   = opponent;
+  const nextCount  = myRole === 'p2' ? turnCount + 1 : turnCount;
+  await update(ref(db, `rooms/${roomCode}`), {
+    currentTurn: nextTurn,
+    turnCount: nextCount,
+  });
+
+  inputBuf = '';
+  document.getElementById('battle-display').innerHTML = '<span class="cursor"></span>';
+}
+
+function addHistRow(col, num, tag, side) {
+  const row = document.createElement('div');
+  row.className = `hist-row ${side}`;
+  const tagText  = tag === 'hit' ? 'HIT!!' : tag === 'high' ? 'HIGH' : 'LOW';
+  const numColor = side === 'mine' ? 'var(--p1)' : 'var(--p2)';
+  row.innerHTML = `
+    <span class="hist-num" style="color:${numColor}">${num}</span>
+    <span class="hist-tag ${tag}">${tagText}</span>
+  `;
+  col.appendChild(row);
+  col.scrollTop = col.scrollHeight;
+}
+
+// ===== テンキー共通 =====
+function buildKeypad(containerId, onKey) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+
+  if (containerId === 'join-keypad') {
+    const keys = ['1','2','3','4','5','6','7','8','9','0','DEL','JOIN'];
+    keys.forEach(k => {
+      const btn = document.createElement('div');
+      if (k === 'JOIN') {
+        btn.className = 'key submit active';
+        btn.style.gridColumn = 'span 2';
+        btn.textContent = '参加する';
+      } else {
+        btn.className = 'key' + (k === 'DEL' ? ' del' : '');
+        btn.textContent = k;
+      }
+      btn.addEventListener('click', () => onKey(k));
+      container.appendChild(btn);
+    });
+    return;
+  }
+
+  const keys = ['1','2','3','4','5','6','7','8','9','0','DEL'];
+  keys.forEach(k => {
+    const btn = document.createElement('div');
+    btn.className = 'key' + (k === 'DEL' ? ' del' : '');
+    btn.textContent = k;
+    btn.addEventListener('click', () => onKey(k));
+    container.appendChild(btn);
+  });
+}
+
+// ===== 結果 =====
+function showResult(iWon, myNum, theirNum, turns) {
+  listeners.forEach(u => u && u());
+  document.getElementById('result-emoji').textContent = iWon ? '🏆' : '😢';
+  document.getElementById('result-title').textContent = iWon ? 'あなたの勝利！' : '相手の勝利...';
+  document.getElementById('result-title').style.color = iWon ? 'var(--p1)' : 'var(--p2)';
+  document.getElementById('result-sub').textContent = `${turns} ターンで決着`;
+  document.getElementById('res-mine').textContent   = myNum;
+  document.getElementById('res-theirs').textContent = theirNum;
+  document.getElementById('res-turn').textContent   = turns;
+  showScreen('screen-result');
+}
+
+window.resetGame = async () => {
+  if (roomCode) {
+    await remove(ref(db, `rooms/${roomCode}`)).catch(() => {});
+  }
+  roomCode = ''; myRole = ''; mySecret = 0;
+  myTurn = false; turnCount = 1; inputBuf = ''; gameOver = false;
+  showScreen('screen-title');
+};
+
+// 初期化
+buildKeypad('setup-keypad', () => {});
+</script>
+</body>
+</html>
