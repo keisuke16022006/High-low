@@ -990,7 +990,10 @@ function startOnlineBattle() {
   gameOver = false; turnCount = 1; inputBuf = '';
   document.getElementById('hist-mine').innerHTML   = '';
   document.getElementById('hist-theirs').innerHTML = '';
-  buildBattleKeypad();
+  // P1が先攻なので、P1ならすぐタイマー開始
+  myTurn = myRole === 'p1';
+  updateTurnUI();
+  startTimer();
   showScreen('screen-battle');
   listenBattle();
 }
@@ -1019,9 +1022,11 @@ function listenBattle() {
 
   const unsubWinner = onValue(ref(db, `rooms/${roomCode}/winner`), snap => {
     if (!snap.val() || gameOver) return;
+    const winner = snap.val();
+    // drawへの上書きは常に処理する
+    if (winner !== 'draw' && gameOver) return;
     gameOver = true;
     clearTimerInterval();
-    const winner = snap.val();
     const isDraw    = winner === 'draw';
     const iWon      = !isDraw && (winner === myRole || winner === 'timeout_' + (myRole === 'p1' ? 'p2' : 'p1'));
     const isTimeout = typeof winner === 'string' && winner.startsWith('timeout_');
@@ -1165,7 +1170,14 @@ async function makeGuess() {
   guesses.push({ num: guess, tag });
 
   if (tag === 'hit') {
-    // 相手が同じターンでHITしていないか確認
+    // まず自分のHitTurnを記録
+    await update(ref(db, `rooms/${roomCode}`), {
+      [`guesses/${myRole}`]: guesses,
+      [`${myRole}HitTurn`]: turnCount,
+    });
+
+    // 少し待ってから相手のHitTurnを確認（同時HITの検出）
+    await new Promise(r => setTimeout(r, 300));
     const roomSnap = await get(ref(db, `rooms/${roomCode}`));
     const roomData = roomSnap.val();
     const opponentHitTurn = roomData[`${opponent}HitTurn`];
@@ -1173,18 +1185,18 @@ async function makeGuess() {
     if (opponentHitTurn !== undefined && opponentHitTurn === turnCount) {
       // 同じターン内で両者がHIT → 引き分け
       await update(ref(db, `rooms/${roomCode}`), {
-        [`guesses/${myRole}`]: guesses,
         winner: 'draw',
         turnCount,
       });
     } else {
-      // 自分だけHIT → 自分の勝ち
-      await update(ref(db, `rooms/${roomCode}`), {
-        [`guesses/${myRole}`]: guesses,
-        [`${myRole}HitTurn`]: turnCount,
-        winner: myRole,
-        turnCount,
-      });
+      // 相手はまだHITしていない → 自分の勝ち
+      // ただし相手が先にwinnerを書いていたら上書きしない
+      if (!roomData.winner) {
+        await update(ref(db, `rooms/${roomCode}`), {
+          winner: myRole,
+          turnCount,
+        });
+      }
     }
     return;
   }
