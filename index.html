@@ -997,9 +997,12 @@ function startOnlineBattle() {
 
 function listenBattle() {
   const opponent = myRole === 'p1' ? 'p2' : 'p1';
+  let firstTurnCall = true;
 
   const unsubTurn = onValue(ref(db, `rooms/${roomCode}/currentTurn`), snap => {
     if (gameOver) return;
+    // 初回発火は無視（startOnlineBattleで既に処理済み）
+    if (firstTurnCall) { firstTurnCall = false; return; }
     myTurn = snap.val() === myRole;
     updateTurnUI();
     startTimer();
@@ -1018,14 +1021,13 @@ function listenBattle() {
   });
 
   const unsubWinner = onValue(ref(db, `rooms/${roomCode}/winner`), snap => {
-    if (!snap.val() || gameOver) return;
+    if (!snap.val()) return;
     const winner = snap.val();
-    // drawへの上書きは常に処理する
-    if (winner !== 'draw' && gameOver) return;
+    if (gameOver && winner !== 'draw') return;
     gameOver = true;
     clearTimerInterval();
     const isDraw    = winner === 'draw';
-    const iWon      = !isDraw && (winner === myRole || winner === 'timeout_' + (myRole === 'p1' ? 'p2' : 'p1'));
+    const iWon      = !isDraw && (winner === myRole || winner === 'timeout_' + opponent);
     const isTimeout = typeof winner === 'string' && winner.startsWith('timeout_');
     get(ref(db, `rooms/${roomCode}`)).then(s => {
       const d = s.val();
@@ -1043,7 +1045,7 @@ function startTimer() {
   timerLeft = TIMER_SEC;
   updateTimerUI();
   timerInterval = setInterval(() => {
-    timerLeft = Math.max(0, timerLeft - 1);
+    timerLeft--;
     updateTimerUI();
     if (timerLeft <= 0) {
       clearTimerInterval();
