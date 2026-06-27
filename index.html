@@ -244,7 +244,6 @@
     stroke-linecap: round;
     stroke-dasharray: 126;
     stroke-dashoffset: 0;
-    transition: stroke-dashoffset 1s linear, stroke 0.3s;
   }
   .timer-circle-fill.danger { stroke: var(--danger); }
   .timer-circle-num {
@@ -970,24 +969,16 @@ window.confirmSecret = async () => {
     return;
   }
 
-  alert('Firebaseに書き込み開始');
-  try {
-    await update(ref(db, `rooms/${roomCode}`), {
-      [`${myRole}Secret`]: num,
-      [`${myRole}Ready`]: true,
-    });
-    alert('書き込み成功');
-  } catch(e) {
-    alert('書き込みエラー: ' + e.message);
-    return;
-  }
+  await update(ref(db, `rooms/${roomCode}`), {
+    [`${myRole}Secret`]: num,
+    [`${myRole}Ready`]: true,
+  });
 
   document.getElementById('setup-confirm').disabled = true;
   document.getElementById('setup-confirm').textContent = '相手を待っています...';
 
   const unsub = onValue(ref(db, `rooms/${roomCode}`), snap => {
     const d = snap.val();
-    alert('snap受信 p1Ready=' + d?.p1Ready + ' p2Ready=' + d?.p2Ready);
     if (d && d.p1Ready && d.p2Ready) { unsub(); startOnlineBattle(); }
   });
 };
@@ -1052,7 +1043,7 @@ function startTimer() {
   timerLeft = TIMER_SEC;
   updateTimerUI();
   timerInterval = setInterval(() => {
-    timerLeft--;
+    timerLeft = Math.max(0, timerLeft - 1);
     updateTimerUI();
     if (timerLeft <= 0) {
       clearTimerInterval();
@@ -1071,6 +1062,7 @@ function clearTimerInterval() {
 function updateTimerUI() {
   const numEl    = document.getElementById('timer-num');
   const circleEl = document.getElementById('timer-circle-fill');
+  if (!numEl) return;
   const isDanger = timerLeft <= 5;
   const circumference = 126;
   const offset = circumference * (1 - timerLeft / TIMER_SEC);
@@ -1078,7 +1070,7 @@ function updateTimerUI() {
   numEl.textContent = timerLeft;
   numEl.className   = 'timer-circle-num' + (isDanger ? ' danger' : '');
   if (circleEl) {
-    circleEl.style.strokeDashoffset = offset;
+    circleEl.style.strokeDashoffset = offset + 'px';
     circleEl.className = 'timer-circle-fill' + (isDanger ? ' danger' : '');
   }
 }
