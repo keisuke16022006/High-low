@@ -954,7 +954,6 @@ function buildSetupKeypad() {
 
 window.confirmSecret = async () => {
   const num = parseInt(inputBuf);
-  alert('inputBuf=' + inputBuf + ' num=' + num + ' isCPU=' + isCPUMode + ' roomCode=' + roomCode);
   if (!num || isNaN(num) || num < 1 || num > 100) return;
   clearSetupTimer();
   mySecret = num;
@@ -971,16 +970,24 @@ window.confirmSecret = async () => {
     return;
   }
 
-  await update(ref(db, `rooms/${roomCode}`), {
-    [`${myRole}Secret`]: num,
-    [`${myRole}Ready`]: true,
-  });
+  alert('Firebaseに書き込み開始');
+  try {
+    await update(ref(db, `rooms/${roomCode}`), {
+      [`${myRole}Secret`]: num,
+      [`${myRole}Ready`]: true,
+    });
+    alert('書き込み成功');
+  } catch(e) {
+    alert('書き込みエラー: ' + e.message);
+    return;
+  }
 
   document.getElementById('setup-confirm').disabled = true;
   document.getElementById('setup-confirm').textContent = '相手を待っています...';
 
   const unsub = onValue(ref(db, `rooms/${roomCode}`), snap => {
     const d = snap.val();
+    alert('snap受信 p1Ready=' + d?.p1Ready + ' p2Ready=' + d?.p2Ready);
     if (d && d.p1Ready && d.p2Ready) { unsub(); startOnlineBattle(); }
   });
 };
