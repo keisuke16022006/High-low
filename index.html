@@ -954,13 +954,12 @@ function buildSetupKeypad() {
 
 window.confirmSecret = async () => {
   const num = parseInt(inputBuf);
-  if (num < 1 || num > 100) return;
+  if (!num || isNaN(num) || num < 1 || num > 100) return;
   clearSetupTimer();
   mySecret = num;
   document.getElementById('my-number-display').textContent = mySecret;
 
   if (isCPUMode) {
-    // CPU戦はすぐバトル開始、先攻はプレイヤー
     document.getElementById('hist-mine').innerHTML   = '';
     document.getElementById('hist-theirs').innerHTML = '';
     myTurn = true;
@@ -990,11 +989,10 @@ function startOnlineBattle() {
   gameOver = false; turnCount = 1; inputBuf = '';
   document.getElementById('hist-mine').innerHTML   = '';
   document.getElementById('hist-theirs').innerHTML = '';
-  // P1が先攻なので、P1ならすぐタイマー開始
   myTurn = myRole === 'p1';
+  showScreen('screen-battle');
   updateTurnUI();
   startTimer();
-  showScreen('screen-battle');
   listenBattle();
 }
 
