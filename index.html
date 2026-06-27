@@ -954,6 +954,7 @@ function buildSetupKeypad() {
 
 window.confirmSecret = async () => {
   const num = parseInt(inputBuf);
+  alert('inputBuf=' + inputBuf + ' num=' + num + ' isCPU=' + isCPUMode + ' roomCode=' + roomCode);
   if (!num || isNaN(num) || num < 1 || num > 100) return;
   clearSetupTimer();
   mySecret = num;
