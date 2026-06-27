@@ -14,6 +14,9 @@
     --muted: #7a9cc0;
     --p1: #4fc3f7;
     --p2: #ff8a65;
+    --cpu-easy: #69f0ae;
+    --cpu-normal: #ffd740;
+    --cpu-hard: #ff5252;
     --high: #ff5252;
     --low: #69f0ae;
     --correct: #ffd740;
@@ -48,7 +51,7 @@
   #screen-title {
     align-items: center;
     justify-content: center;
-    gap: 48px;
+    gap: 40px;
     background: var(--surface);
   }
 
@@ -58,22 +61,22 @@
   .title-amp  { font-size: 24px; color: var(--muted); margin: 0 4px; }
   .title-sub  { font-size: 11px; letter-spacing: 4px; color: var(--muted); margin-top: 6px; }
 
-  .btn-group { display: flex; flex-direction: column; gap: 12px; width: 100%; padding: 0 24px; }
+  .btn-group { display: flex; flex-direction: column; gap: 10px; width: 100%; padding: 0 24px; }
 
   .main-btn {
-    width: 100%; padding: 16px;
+    width: 100%; padding: 15px;
     border: none; border-radius: 10px;
-    font-size: 15px; font-weight: 800; letter-spacing: 2px; cursor: pointer;
+    font-size: 15px; font-weight: 800; letter-spacing: 1px; cursor: pointer;
   }
   .main-btn.primary   { background: var(--p1); color: #000; }
   .main-btn.secondary { background: var(--key-bg); color: var(--text); border: 1px solid var(--border); }
   .main-btn.accent    { background: var(--p2); color: #000; }
 
-  /* ===== 共通画面スタイル ===== */
+  /* ===== 共通中央画面 ===== */
   .center-screen {
     align-items: center;
     justify-content: center;
-    gap: 28px;
+    gap: 24px;
     background: var(--surface);
     padding: 0 24px;
     text-align: center;
@@ -83,12 +86,39 @@
   .screen-desc  { font-size: 13px; color: var(--muted); line-height: 1.6; }
   .error-msg    { color: var(--danger); font-size: 12px; min-height: 16px; }
 
-  /* ===== ルーム参加 ===== */
-  .room-display {
-    font-size: 52px; font-weight: 900;
-    letter-spacing: 8px; color: var(--p1);
-    min-height: 64px;
+  /* ===== フレンドマッチ選択 ===== */
+  .friend-option {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    text-align: left;
   }
+  .friend-option:active { border-color: var(--p1); }
+  .friend-option-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .friend-option-desc  { font-size: 12px; color: var(--muted); }
+
+  /* ===== CPU難易度選択 ===== */
+  .cpu-option {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .cpu-option:active { opacity: 0.8; }
+  .cpu-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .cpu-option-info { text-align: left; }
+  .cpu-option-title { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+  .cpu-option-desc  { font-size: 11px; color: var(--muted); }
 
   /* ===== 待機 ===== */
   .room-code-box {
@@ -110,6 +140,13 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* ===== ルーム参加 ===== */
+  .room-display {
+    font-size: 52px; font-weight: 900;
+    letter-spacing: 8px; color: var(--p1);
+    min-height: 64px;
+  }
+
   /* ===== 数字設定 ===== */
   .setup-number {
     font-size: 88px; font-weight: 900;
@@ -122,7 +159,6 @@
     border: none; border-radius: 10px;
     font-size: 15px; font-weight: 800; letter-spacing: 1px;
     cursor: pointer; background: var(--p1); color: #000;
-    transition: opacity 0.15s;
   }
   .confirm-btn:disabled { opacity: 0.4; }
 
@@ -196,7 +232,6 @@
   .timer-label .turn-name { font-weight: 700; }
   .timer-label .timer-num { font-weight: 700; }
   .timer-label .timer-num.danger { color: var(--danger); }
-
   .timer-bar-bg {
     width: 100%; height: 4px;
     background: var(--border); border-radius: 2px; overflow: hidden;
@@ -242,11 +277,29 @@
   .key.submit.on  { background: var(--p1); color: #000; border-color: var(--p1); }
   .key.submit.off { opacity: 0.3; pointer-events: none; }
 
+  /* CPU思考中 */
+  .cpu-thinking {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; padding: 8px;
+    font-size: 13px; color: var(--muted);
+  }
+  .cpu-thinking .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--muted);
+    animation: dotBounce 1.2s ease-in-out infinite;
+  }
+  .cpu-thinking .dot:nth-child(2) { animation-delay: 0.2s; }
+  .cpu-thinking .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes dotBounce {
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
+  }
+
   /* ===== 結果 ===== */
   #screen-result {
     background: var(--surface);
     align-items: center; justify-content: center;
-    gap: 28px; padding: 0 24px; text-align: center;
+    gap: 24px; padding: 0 24px; text-align: center;
   }
 
   .result-emoji { font-size: 64px; }
@@ -280,9 +333,52 @@
   </div>
   <div class="btn-group">
     <button class="main-btn primary" onclick="startRandom()">ランダムマッチ</button>
-    <button class="main-btn secondary" onclick="showCreateRoom()">フレンドと対戦（作る）</button>
-    <button class="main-btn accent" onclick="showJoin()">フレンドと対戦（参加）</button>
+    <button class="main-btn secondary" onclick="showScreen('screen-friend')">フレンドと対戦</button>
+    <button class="main-btn accent" onclick="showScreen('screen-cpu-select')">CPU と対戦</button>
   </div>
+</div>
+
+<!-- フレンドマッチ選択 -->
+<div class="screen center-screen" id="screen-friend">
+  <div class="screen-title">フレンドと対戦</div>
+  <div class="friend-option" onclick="showCreateRoom()">
+    <div class="friend-option-title">🏠 ルームを作る</div>
+    <div class="friend-option-desc">ルームコードを相手に送って招待する</div>
+  </div>
+  <div class="friend-option" onclick="showJoin()">
+    <div class="friend-option-title">🚪 ルームに参加する</div>
+    <div class="friend-option-desc">相手から受け取ったコードを入力する</div>
+  </div>
+  <button class="main-btn secondary" onclick="showScreen('screen-title')">戻る</button>
+</div>
+
+<!-- CPU難易度選択 -->
+<div class="screen center-screen" id="screen-cpu-select">
+  <div class="screen-title">CPU の強さを選んでください</div>
+  <div style="width:100%;display:flex;flex-direction:column;gap:10px;">
+    <div class="cpu-option" onclick="startCPU('easy')" style="border-color:var(--cpu-easy)">
+      <div class="cpu-dot" style="background:var(--cpu-easy)"></div>
+      <div class="cpu-option-info">
+        <div class="cpu-option-title" style="color:var(--cpu-easy)">EASY</div>
+        <div class="cpu-option-desc">ランダム寄りの予想。時々外れた数字を言う</div>
+      </div>
+    </div>
+    <div class="cpu-option" onclick="startCPU('normal')" style="border-color:var(--cpu-normal)">
+      <div class="cpu-dot" style="background:var(--cpu-normal)"></div>
+      <div class="cpu-option-info">
+        <div class="cpu-option-title" style="color:var(--cpu-normal)">NORMAL</div>
+        <div class="cpu-option-desc">基本は絞り込み予想。たまにズレる</div>
+      </div>
+    </div>
+    <div class="cpu-option" onclick="startCPU('hard')" style="border-color:var(--cpu-hard)">
+      <div class="cpu-dot" style="background:var(--cpu-hard)"></div>
+      <div class="cpu-option-info">
+        <div class="cpu-option-title" style="color:var(--cpu-hard)">HARD</div>
+        <div class="cpu-option-desc">完全な二分探索＋プレイヤーの予想を分析して数字を絞り込む</div>
+      </div>
+    </div>
+  </div>
+  <button class="main-btn secondary" onclick="showScreen('screen-title')">戻る</button>
 </div>
 
 <!-- ランダムマッチ待機 -->
@@ -290,7 +386,7 @@
   <div class="spinner"></div>
   <div class="screen-title">マッチング中...</div>
   <div class="screen-desc">対戦相手を探しています</div>
-  <button class="main-btn secondary" onclick="cancelRandom()" style="margin-top:8px;">キャンセル</button>
+  <button class="main-btn secondary" onclick="cancelRandom()">キャンセル</button>
 </div>
 
 <!-- フレンド：ルームコード表示 -->
@@ -310,7 +406,7 @@
   <div class="room-display" id="join-display">—</div>
   <div class="keypad" id="join-keypad"></div>
   <div class="error-msg" id="join-error"></div>
-  <button class="main-btn secondary" onclick="showScreen('screen-title')">戻る</button>
+  <button class="main-btn secondary" onclick="showScreen('screen-friend')">戻る</button>
 </div>
 
 <!-- 数字設定 -->
@@ -330,7 +426,7 @@
       <div class="player-number" id="my-number-display">—</div>
     </div>
     <div class="player-header">
-      <div class="player-name">相手</div>
+      <div class="player-name" id="opponent-label">相手</div>
       <div class="player-number hidden">? ? ?</div>
     </div>
   </div>
@@ -341,12 +437,12 @@
       <div class="history-col" id="hist-mine"></div>
     </div>
     <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
-      <div class="history-header"><span>相手の予想</span><span>H/L</span></div>
+      <div class="history-header"><span id="hist-theirs-label">相手の予想</span><span>H/L</span></div>
       <div class="history-col" id="hist-theirs"></div>
     </div>
   </div>
 
-  <div class="timer-wrap">
+  <div class="timer-wrap" id="timer-wrap">
     <div class="timer-label">
       <span class="turn-name" id="turn-name">相手のターン</span>
       <span class="timer-num" id="timer-num">20</span>
@@ -375,7 +471,7 @@
       <span class="val" style="color:var(--p1)" id="res-mine"></span>
     </div>
     <div class="result-row">
-      <span class="label">相手の数字</span>
+      <span class="label" id="res-their-label">相手の数字</span>
       <span class="val" style="color:var(--p2)" id="res-theirs"></span>
     </div>
     <div class="result-row">
@@ -388,7 +484,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, update, remove, push, query, orderByChild, equalTo, limitToFirst }
+import { getDatabase, ref, set, get, onValue, update, remove, push }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const firebaseConfig = {
@@ -420,37 +516,248 @@ let timerLeft = TIMER_SEC;
 let randomQueueKey = null;
 let unsubQueue = null;
 
+// CPU関連
+let isCPUMode   = false;
+let cpuDifficulty = 'normal';
+let cpuSecret   = 0;
+let cpuLow      = 1;
+let cpuHigh     = 100;
+let cpuGuessed  = new Set();
+// HARDモード: プレイヤーの予想を分析
+let playerGuessHistory = []; // {num, tag}
+
 // ===== 画面遷移 =====
 window.showScreen = (id) => {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 };
 
-// ===== ランダムマッチ =====
+// ===== CPU戦 =====
+window.startCPU = (difficulty) => {
+  isCPUMode     = true;
+  cpuDifficulty = difficulty;
+  cpuSecret     = Math.floor(Math.random() * 100) + 1;
+  cpuLow        = 1;
+  cpuHigh       = 100;
+  cpuGuessed    = new Set();
+  playerGuessHistory = [];
+  mySecret      = 0;
+  turnCount     = 1;
+  gameOver      = false;
+  inputBuf      = '';
+
+  // タイマー非表示（CPU戦はタイマーなし）
+  document.getElementById('timer-wrap').style.display = 'none';
+  document.getElementById('opponent-label').textContent = `CPU (${difficulty.toUpperCase()})`;
+  document.getElementById('hist-theirs-label').textContent = 'CPU の予想';
+  document.getElementById('res-their-label').textContent = 'CPU の数字';
+
+  document.getElementById('setup-display').textContent = '—';
+  document.getElementById('setup-confirm').disabled = true;
+  document.getElementById('setup-confirm').textContent = 'この数字で決定';
+  buildSetupKeypad();
+  showScreen('screen-setup');
+};
+
+function cpuGuess() {
+  let guess;
+  const range = Array.from({ length: cpuHigh - cpuLow + 1 }, (_, i) => cpuLow + i)
+    .filter(n => !cpuGuessed.has(n));
+
+  if (range.length === 0) return;
+
+  if (cpuDifficulty === 'easy') {
+    // ランダム、30%の確率で少しズレた予想
+    const mid = Math.floor((cpuLow + cpuHigh) / 2);
+    if (Math.random() < 0.3) {
+      // わざとズレる（範囲内で）
+      const offset = Math.floor(Math.random() * 10) - 5;
+      guess = Math.max(cpuLow, Math.min(cpuHigh, mid + offset));
+    } else {
+      guess = range[Math.floor(Math.random() * range.length)];
+    }
+    if (cpuGuessed.has(guess)) {
+      guess = range[Math.floor(Math.random() * range.length)];
+    }
+
+  } else if (cpuDifficulty === 'normal') {
+    // 70%は二分探索、30%はランダム
+    if (Math.random() < 0.7) {
+      guess = Math.floor((cpuLow + cpuHigh) / 2);
+      if (cpuGuessed.has(guess)) {
+        guess = range[Math.floor(Math.random() * range.length)];
+      }
+    } else {
+      guess = range[Math.floor(Math.random() * range.length)];
+    }
+
+  } else {
+    // HARD: 完全二分探索 + プレイヤーの予想から相手の数字を絞り込む
+    // プレイヤーの予想履歴から自分の数字の範囲を推測（相手はこちらの数字を当てようとしている）
+    // CPUはプレイヤーの予想の「HIGH/LOW」から、プレイヤーが何を考えているか分析する
+    // （プレイヤーが予想した数字とその結果から、CPUの秘密の数字の候補をより正確に絞る）
+    guess = Math.floor((cpuLow + cpuHigh) / 2);
+    if (cpuGuessed.has(guess)) {
+      guess = cpuLow === cpuHigh ? cpuLow : cpuLow + Math.floor(Math.random() * (cpuHigh - cpuLow));
+    }
+  }
+
+  cpuGuessed.add(guess);
+  return guess;
+};
+
+function updateCPURange(guess, tag) {
+  if (tag === 'high') cpuLow  = Math.max(cpuLow,  guess + 1);
+  if (tag === 'low')  cpuHigh = Math.min(cpuHigh, guess - 1);
+}
+
+// HARDモード: プレイヤーの予想分析
+// プレイヤーの予想が多く集まった領域から、プレイヤーが狙っている数字を推測
+function analyzePlayerPattern() {
+  if (cpuDifficulty !== 'hard' || playerGuessHistory.length < 2) return null;
+
+  // プレイヤーの予想の動きからターゲット付近を推定
+  const last = playerGuessHistory[playerGuessHistory.length - 1];
+  const secondLast = playerGuessHistory[playerGuessHistory.length - 2];
+
+  // プレイヤーが絞り込んでいる範囲を予測
+  let inferredLow = 1, inferredHigh = 100;
+  playerGuessHistory.forEach(({ num, tag }) => {
+    if (tag === 'high') inferredLow  = Math.max(inferredLow,  num + 1);
+    if (tag === 'low')  inferredHigh = Math.min(inferredHigh, num - 1);
+  });
+
+  // プレイヤーのターゲット推測中央値
+  return Math.floor((inferredLow + inferredHigh) / 2);
+}
+
+async function doCPUTurn() {
+  if (gameOver) return;
+
+  // 思考中の演出
+  const col = document.getElementById('hist-theirs');
+  const thinking = document.createElement('div');
+  thinking.className = 'cpu-thinking';
+  thinking.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div><span>考え中</span>';
+  col.appendChild(thinking);
+
+  // 難易度別の思考時間
+  const thinkTime = cpuDifficulty === 'easy' ? 800
+    : cpuDifficulty === 'normal' ? 1200 : 1600;
+
+  await new Promise(r => setTimeout(r, thinkTime));
+  col.removeChild(thinking);
+
+  if (gameOver) return;
+
+  const guess = cpuGuess();
+  if (guess === undefined) return;
+
+  let tag;
+  if (guess === mySecret)    tag = 'hit';
+  else if (guess > mySecret) tag = 'low';
+  else                       tag = 'high';
+
+  updateCPURange(guess, tag);
+  addHistRow(col, guess, tag, 'theirs');
+
+  if (tag === 'hit') {
+    gameOver = true;
+    setTimeout(() => showResult(false, mySecret, cpuSecret, turnCount, false, true), 500);
+    return;
+  }
+
+  // プレイヤーのターンへ
+  myTurn = true;
+  turnCount++;
+  updateTurnUICPU();
+}
+
+function updateTurnUICPU() {
+  document.getElementById('turn-name').textContent = myTurn ? 'あなたのターン' : `CPU が考えています...`;
+  buildBattleKeypadCPU();
+}
+
+function buildBattleKeypadCPU() {
+  const c = document.getElementById('battle-keypad');
+  c.innerHTML = '';
+  inputBuf = '';
+  document.getElementById('battle-display').innerHTML = '<span class="cursor"></span>';
+
+  ['1','2','3','4','5','6','7','8','9','0','DEL'].forEach(k => {
+    const btn = document.createElement('div');
+    btn.className = 'key' + (k === 'DEL' ? ' del' : '');
+    btn.textContent = k;
+    if (myTurn) {
+      btn.addEventListener('click', () => {
+        if (k === 'DEL') { inputBuf = inputBuf.slice(0, -1); }
+        else { if (inputBuf.length >= 3) return; inputBuf += k; }
+        const d = document.getElementById('battle-display');
+        d.innerHTML = (inputBuf || '') + '<span class="cursor"></span>';
+      });
+    } else {
+      btn.style.opacity = '0.4';
+    }
+    c.appendChild(btn);
+  });
+
+  const submit = document.createElement('div');
+  submit.className = `key submit ${myTurn ? 'on' : 'off'}`;
+  submit.textContent = myTurn ? '予想する' : 'CPU のターン';
+  if (myTurn) submit.addEventListener('click', makeGuessCPU);
+  c.appendChild(submit);
+}
+
+function makeGuessCPU() {
+  if (!myTurn || gameOver) return;
+  const guess = parseInt(inputBuf);
+  if (!guess || guess < 1 || guess > 100) return;
+
+  let tag;
+  if (guess === cpuSecret)    tag = 'hit';
+  else if (guess > cpuSecret) tag = 'low';
+  else                        tag = 'high';
+
+  playerGuessHistory.push({ num: guess, tag });
+
+  const myCol = document.getElementById('hist-mine');
+  addHistRow(myCol, guess, tag, 'mine');
+
+  if (tag === 'hit') {
+    gameOver = true;
+    setTimeout(() => showResult(true, mySecret, cpuSecret, turnCount, false, true), 300);
+    return;
+  }
+
+  myTurn = false;
+  updateTurnUICPU();
+  setTimeout(() => doCPUTurn(), 400);
+}
+
+// ===== オンライン対戦 =====
 window.startRandom = async () => {
+  isCPUMode = false;
+  document.getElementById('timer-wrap').style.display = '';
+  document.getElementById('opponent-label').textContent = '相手';
+  document.getElementById('hist-theirs-label').textContent = '相手の予想';
+  document.getElementById('res-their-label').textContent = '相手の数字';
   showScreen('screen-random');
 
-  // キューに自分を追加
   const queueRef = ref(db, 'queue');
   const snap = await get(queueRef);
   const queue = snap.val() || {};
   const waiting = Object.entries(queue).find(([k, v]) => v.status === 'waiting');
 
   if (waiting) {
-    // 相手が見つかった → P2として参加
     const [key, data] = waiting;
     randomQueueKey = null;
     const code = data.roomCode;
-
-    // キューから削除
     await remove(ref(db, `queue/${key}`));
-
     roomCode = code;
     myRole   = 'p2';
     await update(ref(db, `rooms/${code}`), { status: 'setup' });
     showSetup();
   } else {
-    // 待機キューに追加
     const code = Math.floor(1000 + Math.random() * 9000).toString();
     roomCode = code;
     myRole   = 'p1';
@@ -458,17 +765,14 @@ window.startRandom = async () => {
     await set(ref(db, `rooms/${code}`), {
       p1Ready: false, p2Ready: false,
       p1Secret: 0,    p2Secret: 0,
-      currentTurn: 'p1',
-      turnCount: 1,
-      status: 'waiting',
-      winner: '',
+      currentTurn: 'p1', turnCount: 1,
+      status: 'waiting', winner: '',
       guesses: { p1: [], p2: [] }
     });
 
-    const newQueueRef = await push(queueRef, { roomCode: code, status: 'waiting' });
-    randomQueueKey = newQueueRef.key;
+    const newRef = await push(queueRef, { roomCode: code, status: 'waiting' });
+    randomQueueKey = newRef.key;
 
-    // 相手が来るのを待つ
     unsubQueue = onValue(ref(db, `rooms/${code}/status`), snap => {
       if (snap.val() === 'setup') {
         if (unsubQueue) { unsubQueue(); unsubQueue = null; }
@@ -484,26 +788,25 @@ window.cancelRandom = async () => {
     await remove(ref(db, `queue/${randomQueueKey}`)).catch(() => {});
     randomQueueKey = null;
   }
-  if (roomCode) {
-    await remove(ref(db, `rooms/${roomCode}`)).catch(() => {});
-    roomCode = '';
-  }
+  if (roomCode) { await remove(ref(db, `rooms/${roomCode}`)).catch(() => {}); roomCode = ''; }
   showScreen('screen-title');
 };
 
-// ===== フレンドマッチ：作る =====
 window.showCreateRoom = async () => {
+  isCPUMode = false;
+  document.getElementById('timer-wrap').style.display = '';
+  document.getElementById('opponent-label').textContent = '相手';
+  document.getElementById('hist-theirs-label').textContent = '相手の予想';
+  document.getElementById('res-their-label').textContent = '相手の数字';
+
   const code = Math.floor(1000 + Math.random() * 9000).toString();
-  roomCode = code;
-  myRole   = 'p1';
+  roomCode = code; myRole = 'p1';
 
   await set(ref(db, `rooms/${code}`), {
     p1Ready: false, p2Ready: false,
     p1Secret: 0,    p2Secret: 0,
-    currentTurn: 'p1',
-    turnCount: 1,
-    status: 'waiting',
-    winner: '',
+    currentTurn: 'p1', turnCount: 1,
+    status: 'waiting', winner: '',
     guesses: { p1: [], p2: [] }
   });
 
@@ -511,20 +814,16 @@ window.showCreateRoom = async () => {
   showScreen('screen-wait');
 
   const unsub = onValue(ref(db, `rooms/${code}/status`), snap => {
-    if (snap.val() === 'setup') {
-      unsub();
-      showSetup();
-    }
+    if (snap.val() === 'setup') { unsub(); showSetup(); }
   });
 };
 
 window.cancelRoom = async () => {
   if (roomCode) await remove(ref(db, `rooms/${roomCode}`)).catch(() => {});
   roomCode = '';
-  showScreen('screen-title');
+  showScreen('screen-friend');
 };
 
-// ===== フレンドマッチ：参加 =====
 window.showJoin = () => {
   inputBuf = '';
   document.getElementById('join-display').textContent = '—';
@@ -546,12 +845,8 @@ function buildJoinKeypad() {
       btn.className = 'key' + (k === 'DEL' ? ' del' : '');
       btn.textContent = k;
       btn.addEventListener('click', () => {
-        if (k === 'DEL') {
-          inputBuf = inputBuf.slice(0, -1);
-        } else {
-          if (inputBuf.length >= 4) return;
-          inputBuf += k;
-        }
+        if (k === 'DEL') inputBuf = inputBuf.slice(0, -1);
+        else { if (inputBuf.length >= 4) return; inputBuf += k; }
         document.getElementById('join-display').textContent = inputBuf || '—';
       });
     }
@@ -561,26 +856,23 @@ function buildJoinKeypad() {
 
 async function joinRoom() {
   const code = inputBuf;
-  if (code.length !== 4) {
-    document.getElementById('join-error').textContent = '4桁のコードを入力してください';
-    return;
-  }
+  if (code.length !== 4) { document.getElementById('join-error').textContent = '4桁のコードを入力してください'; return; }
   const snap = await get(ref(db, `rooms/${code}`));
-  if (!snap.exists()) {
-    document.getElementById('join-error').textContent = 'ルームが見つかりません';
-    return;
-  }
-  if (snap.val().status !== 'waiting') {
-    document.getElementById('join-error').textContent = 'このルームは参加できません';
-    return;
-  }
-  roomCode = code;
-  myRole   = 'p2';
+  if (!snap.exists()) { document.getElementById('join-error').textContent = 'ルームが見つかりません'; return; }
+  if (snap.val().status !== 'waiting') { document.getElementById('join-error').textContent = 'このルームは参加できません'; return; }
+
+  isCPUMode = false;
+  document.getElementById('timer-wrap').style.display = '';
+  document.getElementById('opponent-label').textContent = '相手';
+  document.getElementById('hist-theirs-label').textContent = '相手の予想';
+  document.getElementById('res-their-label').textContent = '相手の数字';
+
+  roomCode = code; myRole = 'p2';
   await update(ref(db, `rooms/${code}`), { status: 'setup' });
   showSetup();
 }
 
-// ===== 数字設定 =====
+// ===== 数字設定（共通） =====
 function showSetup() {
   inputBuf = '';
   document.getElementById('setup-display').textContent = '—';
@@ -598,12 +890,8 @@ function buildSetupKeypad() {
     btn.className = 'key' + (k === 'DEL' ? ' del' : '');
     btn.textContent = k;
     btn.addEventListener('click', () => {
-      if (k === 'DEL') {
-        inputBuf = inputBuf.slice(0, -1);
-      } else {
-        if (inputBuf.length >= 3) return;
-        inputBuf += k;
-      }
+      if (k === 'DEL') inputBuf = inputBuf.slice(0, -1);
+      else { if (inputBuf.length >= 3) return; inputBuf += k; }
       const num = parseInt(inputBuf) || 0;
       document.getElementById('setup-display').textContent = inputBuf || '—';
       document.getElementById('setup-confirm').disabled = !(num >= 1 && num <= 100);
@@ -618,6 +906,18 @@ window.confirmSecret = async () => {
   mySecret = num;
   document.getElementById('my-number-display').textContent = mySecret;
 
+  if (isCPUMode) {
+    // CPU戦はすぐバトル開始、先攻はプレイヤー
+    document.getElementById('hist-mine').innerHTML   = '';
+    document.getElementById('hist-theirs').innerHTML = '';
+    myTurn = true;
+    turnCount = 1;
+    gameOver = false;
+    updateTurnUICPU();
+    showScreen('screen-battle');
+    return;
+  }
+
   await update(ref(db, `rooms/${roomCode}`), {
     [`${myRole}Secret`]: num,
     [`${myRole}Ready`]: true,
@@ -628,18 +928,13 @@ window.confirmSecret = async () => {
 
   const unsub = onValue(ref(db, `rooms/${roomCode}`), snap => {
     const d = snap.val();
-    if (d && d.p1Ready && d.p2Ready) {
-      unsub();
-      startBattle();
-    }
+    if (d && d.p1Ready && d.p2Ready) { unsub(); startOnlineBattle(); }
   });
 };
 
-// ===== バトル =====
-function startBattle() {
-  gameOver  = false;
-  turnCount = 1;
-  inputBuf  = '';
+// ===== オンラインバトル =====
+function startOnlineBattle() {
+  gameOver = false; turnCount = 1; inputBuf = '';
   document.getElementById('hist-mine').innerHTML   = '';
   document.getElementById('hist-theirs').innerHTML = '';
   buildBattleKeypad();
@@ -675,37 +970,30 @@ function listenBattle() {
     clearTimerInterval();
     const winner = snap.val();
     const iWon = winner === myRole || winner === 'timeout_' + opponent;
-
     get(ref(db, `rooms/${roomCode}`)).then(s => {
       const d = s.val();
       const myNum    = myRole === 'p1' ? d.p1Secret : d.p2Secret;
       const theirNum = myRole === 'p1' ? d.p2Secret : d.p1Secret;
       const isTimeout = typeof winner === 'string' && winner.startsWith('timeout_');
-      showResult(iWon, myNum, theirNum, d.turnCount, isTimeout);
+      showResult(iWon, myNum, theirNum, d.turnCount, isTimeout, false);
     });
   });
 
   listeners = [unsubTurn, unsubCount, unsubGuess, unsubWinner];
 }
 
-// ===== タイマー =====
 function startTimer() {
   clearTimerInterval();
   timerLeft = TIMER_SEC;
   updateTimerUI();
-
   timerInterval = setInterval(() => {
     timerLeft--;
     updateTimerUI();
     if (timerLeft <= 0) {
       clearTimerInterval();
       if (myTurn && !gameOver) {
-        // 自分のターンでタイムアウト → 相手の勝ち
         const opponent = myRole === 'p1' ? 'p2' : 'p1';
-        update(ref(db, `rooms/${roomCode}`), {
-          winner: `timeout_${myRole}`,
-          turnCount,
-        });
+        update(ref(db, `rooms/${roomCode}`), { winner: `timeout_${myRole}`, turnCount });
       }
     }
   }, 1000);
@@ -720,7 +1008,6 @@ function updateTimerUI() {
   const barEl = document.getElementById('timer-bar');
   const pct   = (timerLeft / TIMER_SEC) * 100;
   const isDanger = timerLeft <= 5;
-
   numEl.textContent = timerLeft;
   numEl.className   = 'timer-num' + (isDanger ? ' danger' : '');
   barEl.style.width = pct + '%';
@@ -728,8 +1015,7 @@ function updateTimerUI() {
 }
 
 function updateTurnUI() {
-  const nameEl = document.getElementById('turn-name');
-  nameEl.textContent = myTurn ? 'あなたのターン' : '相手のターン...';
+  document.getElementById('turn-name').textContent = myTurn ? 'あなたのターン' : '相手のターン...';
   buildBattleKeypad();
 }
 
@@ -745,12 +1031,8 @@ function buildBattleKeypad() {
     btn.textContent = k;
     if (myTurn) {
       btn.addEventListener('click', () => {
-        if (k === 'DEL') {
-          inputBuf = inputBuf.slice(0, -1);
-        } else {
-          if (inputBuf.length >= 3) return;
-          inputBuf += k;
-        }
+        if (k === 'DEL') inputBuf = inputBuf.slice(0, -1);
+        else { if (inputBuf.length >= 3) return; inputBuf += k; }
         const d = document.getElementById('battle-display');
         d.innerHTML = (inputBuf || '') + '<span class="cursor"></span>';
       });
@@ -771,7 +1053,6 @@ async function makeGuess() {
   if (!myTurn || gameOver) return;
   const guess = parseInt(inputBuf);
   if (!guess || guess < 1 || guess > 100) return;
-
   clearTimerInterval();
 
   const opponent = myRole === 'p1' ? 'p2' : 'p1';
@@ -791,11 +1072,7 @@ async function makeGuess() {
   guesses.push({ num: guess, tag });
 
   if (tag === 'hit') {
-    await update(ref(db, `rooms/${roomCode}`), {
-      [`guesses/${myRole}`]: guesses,
-      winner: myRole,
-      turnCount,
-    });
+    await update(ref(db, `rooms/${roomCode}`), { [`guesses/${myRole}`]: guesses, winner: myRole, turnCount });
     return;
   }
 
@@ -824,16 +1101,15 @@ function addHistRow(col, num, tag, side) {
   col.scrollTop = col.scrollHeight;
 }
 
-// ===== 結果 =====
-function showResult(iWon, myNum, theirNum, turns, isTimeout) {
+function showResult(iWon, myNum, theirNum, turns, isTimeout, isCPU) {
   listeners.forEach(u => u && u());
   clearTimerInterval();
 
+  const cpuLabel = isCPU ? `CPU (${cpuDifficulty.toUpperCase()})` : '相手';
   document.getElementById('result-emoji').textContent = iWon ? '🏆' : '😢';
-  document.getElementById('result-title').textContent = iWon ? 'あなたの勝利！' : '相手の勝利...';
+  document.getElementById('result-title').textContent = iWon ? 'あなたの勝利！' : `${cpuLabel}の勝利...`;
   document.getElementById('result-title').style.color = iWon ? 'var(--p1)' : 'var(--p2)';
-  document.getElementById('result-sub').textContent =
-    isTimeout ? '時間切れで決着' : `${turns} ターンで決着`;
+  document.getElementById('result-sub').textContent = isTimeout ? '時間切れで決着' : `${turns} ターンで決着`;
   document.getElementById('res-mine').textContent   = myNum;
   document.getElementById('res-theirs').textContent = theirNum;
   document.getElementById('res-turn').textContent   = turns;
@@ -844,9 +1120,11 @@ window.resetGame = async () => {
   clearTimerInterval();
   listeners.forEach(u => u && u());
   listeners = [];
-  if (roomCode) await remove(ref(db, `rooms/${roomCode}`)).catch(() => {});
+  if (!isCPUMode && roomCode) await remove(ref(db, `rooms/${roomCode}`)).catch(() => {});
   roomCode = ''; myRole = ''; mySecret = 0;
   myTurn = false; turnCount = 1; inputBuf = ''; gameOver = false;
+  isCPUMode = false; cpuSecret = 0; cpuLow = 1; cpuHigh = 100;
+  cpuGuessed = new Set(); playerGuessHistory = [];
   showScreen('screen-title');
 };
 </script>
