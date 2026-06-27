@@ -218,30 +218,50 @@
   .hist-tag.low  { background: rgba(105,240,174,0.2); color: var(--low); }
   .hist-tag.hit  { background: rgba(255,215,64,0.25); color: var(--correct); }
 
-  /* タイマーバー */
+  /* タイマー丸表示 */
   .timer-wrap {
     background: var(--panel);
     border-top: 1px solid var(--border);
-    padding: 6px 12px 4px;
+    padding: 8px 12px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
-  .timer-label {
-    display: flex; justify-content: space-between;
-    font-size: 11px; color: var(--muted); margin-bottom: 4px;
+
+  .timer-circle-wrap {
+    flex-shrink: 0;
+    position: relative;
+    width: 44px; height: 44px;
   }
-  .timer-label .turn-name { font-weight: 700; }
-  .timer-label .timer-num { font-weight: 700; }
-  .timer-label .timer-num.danger { color: var(--danger); }
-  .timer-bar-bg {
-    width: 100%; height: 4px;
-    background: var(--border); border-radius: 2px; overflow: hidden;
+  .timer-circle-wrap svg {
+    position: absolute; top: 0; left: 0;
+    transform: rotate(-90deg);
   }
-  .timer-bar-fill {
-    height: 100%; border-radius: 2px;
-    background: var(--p1);
-    transition: width 1s linear, background 0.3s;
+  .timer-circle-bg { fill: none; stroke: var(--border); stroke-width: 4; }
+  .timer-circle-fill {
+    fill: none; stroke: var(--p1); stroke-width: 4;
+    stroke-linecap: round;
+    stroke-dasharray: 126;
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 1s linear, stroke 0.3s;
   }
-  .timer-bar-fill.danger { background: var(--danger); }
+  .timer-circle-fill.danger { stroke: var(--danger); }
+  .timer-circle-num {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 15px; font-weight: 900;
+    color: var(--text);
+  }
+  .timer-circle-num.danger { color: var(--danger); }
+
+  .timer-right { flex: 1; }
+  .turn-name {
+    font-size: 12px; font-weight: 700;
+    color: var(--text); margin-bottom: 2px;
+  }
+  .turn-name.mine   { color: var(--p1); }
+  .turn-name.theirs { color: var(--muted); }
 
   /* 入力エリア */
   .battle-input {
@@ -412,7 +432,16 @@
 <!-- 数字設定 -->
 <div class="screen center-screen" id="screen-setup">
   <div class="screen-title">秘密の数字を決めてください</div>
-  <div class="screen-desc">1〜100 の中から1つ。相手には見えません。</div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="timer-circle-wrap" id="setup-timer-wrap">
+      <svg width="44" height="44" viewBox="0 0 44 44">
+        <circle class="timer-circle-bg" cx="22" cy="22" r="20"/>
+        <circle class="timer-circle-fill" id="setup-circle-fill" cx="22" cy="22" r="20"/>
+      </svg>
+      <div class="timer-circle-num" id="setup-timer-num">30</div>
+    </div>
+    <div class="screen-desc" style="text-align:left;">1〜100 の中から1つ。<br>相手には見えません。</div>
+  </div>
   <div class="setup-number" id="setup-display">—</div>
   <div class="keypad" id="setup-keypad"></div>
   <button class="confirm-btn" id="setup-confirm" onclick="confirmSecret()" disabled>この数字で決定</button>
@@ -443,12 +472,15 @@
   </div>
 
   <div class="timer-wrap" id="timer-wrap">
-    <div class="timer-label">
-      <span class="turn-name" id="turn-name">相手のターン</span>
-      <span class="timer-num" id="timer-num">20</span>
+    <div class="timer-circle-wrap">
+      <svg width="44" height="44" viewBox="0 0 44 44">
+        <circle class="timer-circle-bg" cx="22" cy="22" r="20"/>
+        <circle class="timer-circle-fill" id="timer-circle-fill" cx="22" cy="22" r="20"/>
+      </svg>
+      <div class="timer-circle-num" id="timer-num">20</div>
     </div>
-    <div class="timer-bar-bg">
-      <div class="timer-bar-fill" id="timer-bar" style="width:100%"></div>
+    <div class="timer-right">
+      <div class="turn-name" id="turn-name">相手のターン</div>
     </div>
   </div>
 
@@ -501,6 +533,9 @@ const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
 const TIMER_SEC = 20;
+const SETUP_TIMER_SEC = 30;
+let setupTimerInterval = null;
+let setupTimerLeft = SETUP_TIMER_SEC;
 
 // ===== 状態 =====
 let myRole    = '';
@@ -557,6 +592,10 @@ window.startCPU = (difficulty) => {
   document.getElementById('setup-confirm').textContent = 'この数字で決定';
   buildSetupKeypad();
   showScreen('screen-setup');
+  // CPU戦はsetupタイマー不要なので非表示
+  clearSetupTimer();
+  const setupTimerEl = document.getElementById('setup-timer-wrap');
+  if (setupTimerEl) setupTimerEl.style.display = 'none';
 };
 
 function cpuGuess() {
@@ -663,7 +702,7 @@ async function doCPUTurn() {
 
   if (tag === 'hit') {
     gameOver = true;
-    setTimeout(() => showResult(false, mySecret, cpuSecret, turnCount, false, true), 500);
+    setTimeout(() => showResult(false, mySecret, cpuSecret, turnCount, false, true, false), 500);
     return;
   }
 
@@ -674,7 +713,9 @@ async function doCPUTurn() {
 }
 
 function updateTurnUICPU() {
-  document.getElementById('turn-name').textContent = myTurn ? 'あなたのターン' : `CPU が考えています...`;
+  const nameEl = document.getElementById('turn-name');
+  nameEl.textContent = myTurn ? 'あなたのターン' : `CPU が考えています...`;
+  nameEl.className = 'turn-name ' + (myTurn ? 'mine' : 'theirs');
   buildBattleKeypadCPU();
 }
 
@@ -725,7 +766,7 @@ function makeGuessCPU() {
 
   if (tag === 'hit') {
     gameOver = true;
-    setTimeout(() => showResult(true, mySecret, cpuSecret, turnCount, false, true), 300);
+    setTimeout(() => showResult(true, mySecret, cpuSecret, turnCount, false, true, false), 300);
     return;
   }
 
@@ -878,8 +919,19 @@ function showSetup() {
   document.getElementById('setup-display').textContent = '—';
   document.getElementById('setup-confirm').disabled = true;
   document.getElementById('setup-confirm').textContent = 'この数字で決定';
+  const setupTimerEl = document.getElementById('setup-timer-wrap');
+  if (setupTimerEl) setupTimerEl.style.display = '';
   buildSetupKeypad();
   showScreen('screen-setup');
+
+  // セットアップタイマー開始
+  startSetupTimer(() => {
+    const randomNum = Math.floor(Math.random() * 100) + 1;
+    inputBuf = randomNum.toString();
+    document.getElementById('setup-display').textContent = inputBuf;
+    document.getElementById('setup-confirm').disabled = false;
+    confirmSecret();
+  });
 }
 
 function buildSetupKeypad() {
@@ -903,6 +955,7 @@ function buildSetupKeypad() {
 window.confirmSecret = async () => {
   const num = parseInt(inputBuf);
   if (num < 1 || num > 100) return;
+  clearSetupTimer();
   mySecret = num;
   document.getElementById('my-number-display').textContent = mySecret;
 
@@ -969,13 +1022,14 @@ function listenBattle() {
     gameOver = true;
     clearTimerInterval();
     const winner = snap.val();
-    const iWon = winner === myRole || winner === 'timeout_' + opponent;
+    const isDraw    = winner === 'draw';
+    const iWon      = !isDraw && (winner === myRole || winner === 'timeout_' + (myRole === 'p1' ? 'p2' : 'p1'));
+    const isTimeout = typeof winner === 'string' && winner.startsWith('timeout_');
     get(ref(db, `rooms/${roomCode}`)).then(s => {
       const d = s.val();
       const myNum    = myRole === 'p1' ? d.p1Secret : d.p2Secret;
       const theirNum = myRole === 'p1' ? d.p2Secret : d.p1Secret;
-      const isTimeout = typeof winner === 'string' && winner.startsWith('timeout_');
-      showResult(iWon, myNum, theirNum, d.turnCount, isTimeout, false);
+      showResult(iWon, myNum, theirNum, d.turnCount, isTimeout, false, isDraw);
     });
   });
 
@@ -1004,18 +1058,57 @@ function clearTimerInterval() {
 }
 
 function updateTimerUI() {
-  const numEl = document.getElementById('timer-num');
-  const barEl = document.getElementById('timer-bar');
-  const pct   = (timerLeft / TIMER_SEC) * 100;
+  const numEl    = document.getElementById('timer-num');
+  const circleEl = document.getElementById('timer-circle-fill');
   const isDanger = timerLeft <= 5;
+  const circumference = 126;
+  const offset = circumference * (1 - timerLeft / TIMER_SEC);
+
   numEl.textContent = timerLeft;
-  numEl.className   = 'timer-num' + (isDanger ? ' danger' : '');
-  barEl.style.width = pct + '%';
-  barEl.className   = 'timer-bar-fill' + (isDanger ? ' danger' : '');
+  numEl.className   = 'timer-circle-num' + (isDanger ? ' danger' : '');
+  if (circleEl) {
+    circleEl.style.strokeDashoffset = offset;
+    circleEl.className = 'timer-circle-fill' + (isDanger ? ' danger' : '');
+  }
+}
+
+function startSetupTimer(onTimeout) {
+  clearSetupTimer();
+  setupTimerLeft = SETUP_TIMER_SEC;
+  updateSetupTimerUI();
+
+  setupTimerInterval = setInterval(() => {
+    setupTimerLeft--;
+    updateSetupTimerUI();
+    if (setupTimerLeft <= 0) {
+      clearSetupTimer();
+      onTimeout();
+    }
+  }, 1000);
+}
+
+function clearSetupTimer() {
+  if (setupTimerInterval) { clearInterval(setupTimerInterval); setupTimerInterval = null; }
+}
+
+function updateSetupTimerUI() {
+  const numEl    = document.getElementById('setup-timer-num');
+  const circleEl = document.getElementById('setup-circle-fill');
+  if (!numEl || !circleEl) return;
+  const isDanger = setupTimerLeft <= 10;
+  const circumference = 126;
+  const offset = circumference * (1 - setupTimerLeft / SETUP_TIMER_SEC);
+
+  numEl.textContent = setupTimerLeft;
+  numEl.className   = 'timer-circle-num' + (isDanger ? ' danger' : '');
+  circleEl.style.strokeDashoffset = offset;
+  circleEl.className = 'timer-circle-fill' + (isDanger ? ' danger' : '');
 }
 
 function updateTurnUI() {
-  document.getElementById('turn-name').textContent = myTurn ? 'あなたのターン' : '相手のターン...';
+  const nameEl = document.getElementById('turn-name');
+  nameEl.textContent = myTurn ? 'あなたのターン' : '相手のターン...';
+  nameEl.className = 'turn-name ' + (myTurn ? 'mine' : 'theirs');
   buildBattleKeypad();
 }
 
@@ -1072,7 +1165,27 @@ async function makeGuess() {
   guesses.push({ num: guess, tag });
 
   if (tag === 'hit') {
-    await update(ref(db, `rooms/${roomCode}`), { [`guesses/${myRole}`]: guesses, winner: myRole, turnCount });
+    // 相手が同じターンでHITしていないか確認
+    const roomSnap = await get(ref(db, `rooms/${roomCode}`));
+    const roomData = roomSnap.val();
+    const opponentHitTurn = roomData[`${opponent}HitTurn`];
+
+    if (opponentHitTurn !== undefined && opponentHitTurn === turnCount) {
+      // 同じターン内で両者がHIT → 引き分け
+      await update(ref(db, `rooms/${roomCode}`), {
+        [`guesses/${myRole}`]: guesses,
+        winner: 'draw',
+        turnCount,
+      });
+    } else {
+      // 自分だけHIT → 自分の勝ち
+      await update(ref(db, `rooms/${roomCode}`), {
+        [`guesses/${myRole}`]: guesses,
+        [`${myRole}HitTurn`]: turnCount,
+        winner: myRole,
+        turnCount,
+      });
+    }
     return;
   }
 
@@ -1101,15 +1214,24 @@ function addHistRow(col, num, tag, side) {
   col.scrollTop = col.scrollHeight;
 }
 
-function showResult(iWon, myNum, theirNum, turns, isTimeout, isCPU) {
+function showResult(iWon, myNum, theirNum, turns, isTimeout, isCPU, isDraw) {
   listeners.forEach(u => u && u());
   clearTimerInterval();
 
   const cpuLabel = isCPU ? `CPU (${cpuDifficulty.toUpperCase()})` : '相手';
-  document.getElementById('result-emoji').textContent = iWon ? '🏆' : '😢';
-  document.getElementById('result-title').textContent = iWon ? 'あなたの勝利！' : `${cpuLabel}の勝利...`;
-  document.getElementById('result-title').style.color = iWon ? 'var(--p1)' : 'var(--p2)';
-  document.getElementById('result-sub').textContent = isTimeout ? '時間切れで決着' : `${turns} ターンで決着`;
+
+  if (isDraw) {
+    document.getElementById('result-emoji').textContent = '🤝';
+    document.getElementById('result-title').textContent = '引き分け！';
+    document.getElementById('result-title').style.color = 'var(--correct)';
+    document.getElementById('result-sub').textContent = `同じターンで同時に正解！`;
+  } else {
+    document.getElementById('result-emoji').textContent = iWon ? '🏆' : '😢';
+    document.getElementById('result-title').textContent = iWon ? 'あなたの勝利！' : `${cpuLabel}の勝利...`;
+    document.getElementById('result-title').style.color = iWon ? 'var(--p1)' : 'var(--p2)';
+    document.getElementById('result-sub').textContent = isTimeout ? '時間切れで決着' : `${turns} ターンで決着`;
+  }
+
   document.getElementById('res-mine').textContent   = myNum;
   document.getElementById('res-theirs').textContent = theirNum;
   document.getElementById('res-turn').textContent   = turns;
@@ -1118,6 +1240,7 @@ function showResult(iWon, myNum, theirNum, turns, isTimeout, isCPU) {
 
 window.resetGame = async () => {
   clearTimerInterval();
+  clearSetupTimer();
   listeners.forEach(u => u && u());
   listeners = [];
   if (!isCPUMode && roomCode) await remove(ref(db, `rooms/${roomCode}`)).catch(() => {});
