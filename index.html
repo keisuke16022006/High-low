@@ -1048,8 +1048,9 @@ function updateTimerUI() {
   numEl.className = 'timer-circle-num' + (isDanger ? ' danger' : '');
   const circleEl = document.getElementById('timer-circle-fill');
   if (circleEl) {
-    const offset = 126 * (1 - timerLeft / TIMER_SEC);
-    circleEl.style.strokeDashoffset = offset;
+    // 時計回りに減る：満タンが0、空が126
+    const offset = 126 * (timerLeft / TIMER_SEC);
+    circleEl.style.strokeDashoffset = 126 - offset;
     circleEl.setAttribute('class', 'timer-circle-fill' + (isDanger ? ' danger' : ''));
   }
 }
@@ -1059,10 +1060,10 @@ function updateSetupTimerUI() {
   const circleEl = document.getElementById('setup-circle-fill');
   if (!numEl || !circleEl) return;
   const isDanger = setupTimerLeft <= 10;
-  const offset = 126 * (1 - setupTimerLeft / SETUP_TIMER_SEC);
+  const offset = 126 * (setupTimerLeft / SETUP_TIMER_SEC);
   numEl.textContent = setupTimerLeft;
   numEl.className = 'timer-circle-num' + (isDanger ? ' danger' : '');
-  circleEl.style.strokeDashoffset = offset;
+  circleEl.style.strokeDashoffset = 126 - offset;
   circleEl.setAttribute('class', 'timer-circle-fill' + (isDanger ? ' danger' : ''));
 }
 
@@ -1166,33 +1167,30 @@ async function makeGuess() {
   guesses.push({ num: guess, tag });
 
   if (tag === 'hit') {
-    // まず自分のHitTurnを記録
     await update(ref(db, `rooms/${roomCode}`), {
       [`guesses/${myRole}`]: guesses,
-      [`${myRole}HitTurn`]: turnCount,
     });
 
-    // 少し待ってから相手のHitTurnを確認（同時HITの検出）
-    await new Promise(r => setTimeout(r, 300));
+    // 相手が先にwinnerを書き込んでいるか確認
     const roomSnap = await get(ref(db, `rooms/${roomCode}`));
     const roomData = roomSnap.val();
-    const opponentHitTurn = roomData[`${opponent}HitTurn`];
+    const currentWinner = roomData.winner;
 
-    if (opponentHitTurn !== undefined && opponentHitTurn === turnCount) {
-      // 同じターン内で両者がHIT → 引き分け
+    if (currentWinner && currentWinner !== '' && currentWinner !== myRole) {
+      // 相手が先にHIT → 同じターンかチェック
+      const opponentHitTurn = roomData[`${opponent}HitTurn`] || 0;
+      if (opponentHitTurn === turnCount) {
+        // 同じターン → 引き分け
+        await update(ref(db, `rooms/${roomCode}`), { winner: 'draw', turnCount });
+      }
+      // 違うターンなら相手の勝ちのまま（何もしない）
+    } else {
+      // 自分が先にHIT → 勝ち記録
       await update(ref(db, `rooms/${roomCode}`), {
-        winner: 'draw',
+        [`${myRole}HitTurn`]: turnCount,
+        winner: myRole,
         turnCount,
       });
-    } else {
-      // 相手はまだHITしていない → 自分の勝ち
-      // ただし相手が先にwinnerを書いていたら上書きしない
-      if (!roomData.winner) {
-        await update(ref(db, `rooms/${roomCode}`), {
-          winner: myRole,
-          turnCount,
-        });
-      }
     }
     return;
   }
