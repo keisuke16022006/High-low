@@ -284,7 +284,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, update, remove, push, runTransaction }
+import { getDatabase, ref, set, get, onValue, update, remove, push }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 const firebaseConfig = {
@@ -741,24 +741,20 @@ async function makeGuess() {
   guesses.push({num:guess,tag});
 
   if(tag==='hit'){
-    // Firebaseのtransactionを使って引き分け判定を原子的に行う
-    await runTransaction(ref(db,`rooms/${roomCode}`),roomData=>{
-      if(!roomData) return roomData;
-      // 自分のHitTurnを記録
-      roomData[`${myRole}HitTurn`]=turnCount;
-      // 相手のHitTurnを確認
-      const oppHitTurn=roomData[`${opp}HitTurn`];
-      if(oppHitTurn!==undefined&&oppHitTurn>=0&&oppHitTurn===turnCount){
-        // 同じターンで両者HIT → 引き分け
-        roomData.winner='draw';
-      } else if(!roomData.winner||roomData.winner===''){
-        // 自分が先 → 勝ち
-        roomData.winner=myRole;
-      }
-      roomData[`guesses/${myRole}`]=guesses;
-      roomData.turnCount=turnCount;
-      return roomData;
+    // まずguessesとHitTurnを記録
+    await update(ref(db,`rooms/${roomCode}`),{
+      [`guesses/${myRole}`]:guesses,
+      [`${myRole}HitTurn`]:turnCount,
     });
+    // 相手のHitTurnを確認（同じターンなら引き分け）
+    const roomSnap=await get(ref(db,`rooms/${roomCode}`));
+    const d=roomSnap.val();
+    const oppHitTurn=d[`${opp}HitTurn`];
+    if(oppHitTurn!==undefined&&oppHitTurn!==-1&&oppHitTurn===turnCount){
+      await update(ref(db,`rooms/${roomCode}`),{winner:'draw',turnCount});
+    } else if(!d.winner||d.winner===''){
+      await update(ref(db,`rooms/${roomCode}`),{winner:myRole,turnCount});
+    }
     return;
   }
 
