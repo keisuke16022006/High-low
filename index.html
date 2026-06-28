@@ -1040,6 +1040,32 @@ function listenBattle() {
   listeners = [unsubTurn, unsubCount, unsubGuess, unsubWinner];
 }
 
+function updateTimerUI() {
+  const numEl = document.getElementById('timer-num');
+  if (!numEl) return;
+  const isDanger = timerLeft <= 5;
+  numEl.textContent = timerLeft;
+  numEl.className = 'timer-circle-num' + (isDanger ? ' danger' : '');
+  const circleEl = document.getElementById('timer-circle-fill');
+  if (circleEl) {
+    const offset = 126 * (1 - timerLeft / TIMER_SEC);
+    circleEl.style.strokeDashoffset = offset;
+    circleEl.setAttribute('class', 'timer-circle-fill' + (isDanger ? ' danger' : ''));
+  }
+}
+
+function updateSetupTimerUI() {
+  const numEl    = document.getElementById('setup-timer-num');
+  const circleEl = document.getElementById('setup-circle-fill');
+  if (!numEl || !circleEl) return;
+  const isDanger = setupTimerLeft <= 10;
+  const offset = 126 * (1 - setupTimerLeft / SETUP_TIMER_SEC);
+  numEl.textContent = setupTimerLeft;
+  numEl.className = 'timer-circle-num' + (isDanger ? ' danger' : '');
+  circleEl.style.strokeDashoffset = offset;
+  circleEl.setAttribute('class', 'timer-circle-fill' + (isDanger ? ' danger' : ''));
+}
+
 function startTimer() {
   clearTimerInterval();
   timerLeft = TIMER_SEC;
@@ -1055,26 +1081,6 @@ function startTimer() {
       }
     }
   }, 1000);
-}
-
-function clearTimerInterval() {
-  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-}
-
-function updateTimerUI() {
-  const numEl    = document.getElementById('timer-num');
-  const circleEl = document.getElementById('timer-circle-fill');
-  if (!numEl) return;
-  const isDanger = timerLeft <= 5;
-  const circumference = 126;
-  const offset = circumference * (1 - timerLeft / TIMER_SEC);
-
-  numEl.textContent = timerLeft;
-  numEl.className   = 'timer-circle-num' + (isDanger ? ' danger' : '');
-  if (circleEl) {
-    circleEl.style.strokeDashoffset = offset + 'px';
-    circleEl.className = 'timer-circle-fill' + (isDanger ? ' danger' : '');
-  }
 }
 
 function startSetupTimer(onTimeout) {
@@ -1096,18 +1102,8 @@ function clearSetupTimer() {
   if (setupTimerInterval) { clearInterval(setupTimerInterval); setupTimerInterval = null; }
 }
 
-function updateSetupTimerUI() {
-  const numEl    = document.getElementById('setup-timer-num');
-  const circleEl = document.getElementById('setup-circle-fill');
-  if (!numEl || !circleEl) return;
-  const isDanger = setupTimerLeft <= 10;
-  const circumference = 126;
-  const offset = circumference * (1 - setupTimerLeft / SETUP_TIMER_SEC);
-
-  numEl.textContent = setupTimerLeft;
-  numEl.className   = 'timer-circle-num' + (isDanger ? ' danger' : '');
-  circleEl.style.strokeDashoffset = offset;
-  circleEl.className = 'timer-circle-fill' + (isDanger ? ' danger' : '');
+function clearTimerInterval() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 }
 
 function updateTurnUI() {
