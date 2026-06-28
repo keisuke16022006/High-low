@@ -673,7 +673,8 @@ function listenBattle() {
 
   const unsubGuess=onValue(ref(db,`rooms/${roomCode}/guesses/${opp}`),snap=>{
     if(gameOver) return;
-    const guesses=snap.val()||[];
+    const raw=snap.val();
+    const guesses=raw ? (Array.isArray(raw) ? raw : Object.values(raw)) : [];
     const col=document.getElementById('hist-theirs');
     col.innerHTML='';
     guesses.forEach(g=>addHistRow(col,g.num,g.tag,'theirs'));
@@ -741,11 +742,8 @@ async function makeGuess() {
   guesses.push({num:guess,tag});
 
   if(tag==='hit'){
-    // guessesを更新
-    await update(ref(db,`rooms/${roomCode}/guesses`),{[myRole]:guesses});
-    // HitTurnを記録
+    await set(ref(db,`rooms/${roomCode}/guesses/${myRole}`),guesses);
     await update(ref(db,`rooms/${roomCode}`),{[`${myRole}HitTurn`]:turnCount});
-    // 相手のHitTurnを確認
     const roomSnap=await get(ref(db,`rooms/${roomCode}`));
     const d=roomSnap.val();
     const oppHitTurn=d[`${opp}HitTurn`];
@@ -759,7 +757,7 @@ async function makeGuess() {
 
   const nextTurn=opp;
   const nextCount=myRole==='p2'?turnCount+1:turnCount;
-  await update(ref(db,`rooms/${roomCode}/guesses`),{[myRole]:guesses});
+  await set(ref(db,`rooms/${roomCode}/guesses/${myRole}`),guesses);
   await update(ref(db,`rooms/${roomCode}`),{
     currentTurn:nextTurn,
     turnCount:nextCount,
