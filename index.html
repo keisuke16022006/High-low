@@ -734,48 +734,18 @@ async function submitOnlineGuess(num) {
   // 自分の予想を即座にローカル表示
   addHistRow(document.getElementById('hist-mine'), num, tag, 'mine');
 
-  // Firebaseにpushで追加（自動でユニークキーが振られる。これが追加順の同期にも使える）
+  // Firebaseにpushで追加
   await push(ref(db, `rooms/${roomCode}/guesses/${myRole}`), { num, tag, ts: Date.now() });
 
   if (tag === 'hit') {
-    // 自分がHITしたことを「結果確定待ち」状態にする。
-    // ローカルではまだ相手に決着がついたかわからないので、少し待って判定する。
     document.getElementById('turn-name').textContent = '結果を確認中...';
     document.getElementById('turn-name').className = 'turn-name theirs';
     buildBattleKeypad(false, () => {});
-    // 同時HIT判定のため、少し待って両者のguessesを再取得して判定
-    setTimeout(() => resolveOnlineResult(), 1200);
+    // 判定はlistenBothGuessesの監視に任せる（ここでは何もしない）
     return;
   }
 
-  // ミスなら相手のターンへ。相手のターンに移ったことは、相手側のguessesのonValueで検知される
   renderOnlineTurn(false);
-}
-
-async function resolveOnlineResult() {
-  if (gameOver) return;
-  const myGSnap = await get(ref(db, `rooms/${roomCode}/guesses/${myRole}`));
-  const oppRole = myRole === 'p1' ? 'p2' : 'p1';
-  const oppGSnap = await get(ref(db, `rooms/${roomCode}/guesses/${oppRole}`));
-
-  const myList = flattenGuesses(myGSnap.val());
-  const oppList = flattenGuesses(oppGSnap.val());
-
-  const myHitIndex = myList.findIndex(g => g.tag === 'hit');
-  const oppHitIndex = oppList.findIndex(g => g.tag === 'hit');
-
-  if (myHitIndex === -1) return; // まだ自分のHITが見えない（通常起きない）
-
-  if (oppHitIndex !== -1 && oppHitIndex === myHitIndex) {
-    // 同じ手数（ターン）で両者命中 → 引き分け
-    finishOnline('draw', myList.length, oppList.length);
-  } else if (oppHitIndex !== -1 && oppHitIndex < myHitIndex) {
-    // 相手が自分より少ない手数でHITしている → 相手の勝ち
-    finishOnline('opponent', myList.length, oppList.length);
-  } else {
-    // 相手はまだHITしていない、または自分より手数が多い → 自分の勝ち
-    finishOnline('me', myList.length, oppList.length);
-  }
 }
 
 function flattenGuesses(raw) {
@@ -794,7 +764,7 @@ function finishOnline(result, myTurns, theirTurns) {
     const myNum = myRole === 'p1' ? d.p1Secret : d.p2Secret;
     const theirNum = myRole === 'p1' ? d.p2Secret : d.p1Secret;
     showResult({
-      winner: result === 'draw' ? 'draw' : (result === 'me' ? 'me' : 'cpu_or_opp'),
+      winner: result,
       mine: myNum, theirs: theirNum,
       turns: Math.max(myTurns, theirTurns),
       isCPU: false,
@@ -804,40 +774,84 @@ function finishOnline(result, myTurns, theirTurns) {
 
 function handleTimeout() {
   if (gameOver) return;
-  finishOnline('opponent', 0, 0); // 自分がタイムアウト→負け
+  finishOnline('opponent', 0, 0);
 }
 
-// 相手の予想をリアルタイムに反映する監視
+// 自分と相手、両方のguessesを常に監視し、両者の状態が揃った時点で判定する
 function listenOnlineGuesses() {
   const oppRole = myRole === 'p1' ? 'p2' : 'p1';
-  let lastSeenCount = 0;
+  let myList = [];
+  let oppList = [];
+  let myPrevLen = 0, oppPrevLen = 0;
+  let oppTurnRendered = false;
 
-  const unsub = onValue(ref(db, `rooms/${roomCode}/guesses/${oppRole}`), snap => {
+  function tryResolve() {
     if (gameOver) return;
-    const list = flattenGuesses(snap.val());
+    const myHitIndex = myList.findIndex(g => g.tag === 'hit');
+    const oppHitIndex = oppList.findIndex(g => g.tag === 'hit');
 
-    // 新しく増えた分だけ描画
+    // どちらもまだHITしていなければ判定しない
+    if (myHitIndex === -1 && oppHitIndex === -1) return;
+
+    // 自分だけHITしている場合：相手がまだ反応していない可能性があるので、
+    // 相手の手数が自分のHIT時点に追いついているかを見る
+    if (myHitIndex !== -1 && oppHitIndex === -1) {
+      // 相手の予想数が、自分がHITした時点の手数にまだ追いついていなければ待つ
+      if (oppList.length <= myHitIndex) return;
+      finishOnline('me', myList.length, oppList.length);
+      return;
+    }
+
+    if (oppHitIndex !== -1 && myHitIndex === -1) {
+      if (myList.length <= oppHitIndex) return;
+      finishOnline('opponent', myList.length, oppList.length);
+      return;
+    }
+
+    // 両方HITしている
+    if (myHitIndex === oppHitIndex) {
+      finishOnline('draw', myList.length, oppList.length);
+    } else if (myHitIndex < oppHitIndex) {
+      finishOnline('me', myList.length, oppList.length);
+    } else {
+      finishOnline('opponent', myList.length, oppList.length);
+    }
+  }
+
+  const unsubMine = onValue(ref(db, `rooms/${roomCode}/guesses/${myRole}`), snap => {
+    if (gameOver) return;
+    myList = flattenGuesses(snap.val());
+    if (myList.length > myPrevLen) {
+      myPrevLen = myList.length;
+      tryResolve();
+    }
+  });
+
+  const unsubOpp = onValue(ref(db, `rooms/${roomCode}/guesses/${oppRole}`), snap => {
+    if (gameOver) return;
+    oppList = flattenGuesses(snap.val());
+
     const col = document.getElementById('hist-theirs');
     col.innerHTML = '';
-    list.forEach(g => addHistRow(col, g.num, g.tag, 'theirs'));
+    oppList.forEach(g => addHistRow(col, g.num, g.tag, 'theirs'));
 
-    if (list.length > lastSeenCount) {
-      lastSeenCount = list.length;
-      const last = list[list.length - 1];
-
-      if (last.tag === 'hit') {
-        // 相手がHITした。自分もすでにHIT済みか確認してから決着判定
-        setTimeout(() => resolveOnlineResult(), 300);
-      } else {
-        // 相手がミスした → 自分のターンになる
-        clearTimerInterval();
-        renderOnlineTurn(true);
-        startTimer(() => handleTimeout());
+    if (oppList.length > oppPrevLen) {
+      oppPrevLen = oppList.length;
+      const last = oppList[oppList.length - 1];
+      tryResolve();
+      if (!gameOver && last.tag !== 'hit') {
+        // 相手がミスした → 自分のターンになる（まだ自分がHIT済みでなければ）
+        const myHitIndex = myList.findIndex(g => g.tag === 'hit');
+        if (myHitIndex === -1) {
+          clearTimerInterval();
+          renderOnlineTurn(true);
+          startTimer(() => handleTimeout());
+        }
       }
     }
   });
 
-  unsubscribers.push(unsub);
+  unsubscribers.push(unsubMine, unsubOpp);
 }
 
 // ============================================================
