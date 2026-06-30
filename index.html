@@ -326,7 +326,9 @@ function setCircle(id, left, total) {
   const el = document.getElementById(id);
   if (!el) return;
   const pct = Math.max(0, left) / total;
-  el.style.strokeDashoffset = String(126 * (1 - pct));
+  // 経過した分だけ負方向にオフセットすることで時計回りに減らす
+  const elapsed = 126 * (1 - pct);
+  el.style.strokeDashoffset = String(-elapsed);
 }
 function setNum(id, val, dangerThreshold) {
   const el = document.getElementById(id);
