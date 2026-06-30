@@ -722,6 +722,8 @@ function renderOnlineTurn(myTurn) {
   buildBattleKeypad(myTurn, num => submitOnlineGuess(num));
 }
 
+let myGuessCounter = 0; // 自分が今までに打った予想の回数（確実なローカルカウント）
+
 async function submitOnlineGuess(num) {
   if (gameOver) return;
   clearTimerInterval();
@@ -730,6 +732,9 @@ async function submitOnlineGuess(num) {
   const oppSecretSnap = await get(ref(db, `rooms/${roomCode}/${oppRole}Secret`));
   const oppSecret = oppSecretSnap.val();
   const tag = num === oppSecret ? 'hit' : num > oppSecret ? 'low' : 'high';
+
+  myGuessCounter++;
+  const myCount = myGuessCounter;
 
   addHistRow(document.getElementById('hist-mine'), num, tag, 'mine');
   await push(ref(db, `rooms/${roomCode}/guesses/${myRole}`), { num, tag, ts: Date.now() });
@@ -747,28 +752,29 @@ async function submitOnlineGuess(num) {
       renderOnlineTurn(false);
     }
   } else {
-    // 後攻(p2)が予想した直後
-    // window.__p2Listはまだ更新されていない可能性があるため、+1して確実な回数を計算
-    const myGuessCount = (window.__p2List || []).length + 1;
+    // 後攻(p2)が予想した直後。myCountが「今打った回数」として確実
+    const p1List = window.__p1List || [];
+    const p1HitIndex = p1List.findIndex(g => g.tag === 'hit');
 
     if (tag === 'hit') {
       // 後攻が当てた
-      // 先攻がこの回(同じ回数目)ですでに当てていたら「引き分け」
-      // そうでなければ（先攻はまだこの回で当てていない＝後攻が先に当てた）後攻の勝ち
-      const p1List = window.__p1List || [];
-      const p1HitIndex = p1List.findIndex(g => g.tag === 'hit');
-
-      if (p1HitIndex !== -1 && p1HitIndex === myGuessCount - 1) {
+      if (p1HitIndex !== -1 && p1HitIndex === myCount - 1) {
         // 先攻も同じ回数目で当てていた → 引き分け
-        finishOnline('draw', p1List.length, myGuessCount);
+        finishOnline('draw', p1List.length, myCount);
       } else {
         // 先攻はまだ当てていない（後攻が先に当てた） → 後攻の勝ち
-        finishOnline('me', p1List.length, myGuessCount);
+        finishOnline('me', p1List.length, myCount);
       }
     } else {
       // 後攻が外した
-      // もし先攻がこの回ですでに当てていたら、先攻の勝ちで確定
-      finishOrContinue(myGuessCount);
+      if (p1HitIndex !== -1 && p1HitIndex === myCount - 1) {
+        // 先攻が同じ回数目で当てていた → 先攻の勝ち
+        finishOnline('opponent', p1List.length, myCount);
+      } else {
+        // 次のターン(先攻)へ
+        clearTimerInterval();
+        renderOnlineTurn(false);
+      }
     }
   }
 }
@@ -800,27 +806,6 @@ function finishOnline(result, myTurns, theirTurns) {
 function handleTimeout() {
   if (gameOver) return;
   finishOnline('opponent', 0, 0);
-}
-
-// 後攻が外した瞬間に呼ぶ：先攻が同じ回数目ですでに当てていたかを確認
-function finishOrContinue(myGuessCount) {
-  const p1List = window.__p1List || [];
-  const p1HitIndex = p1List.findIndex(g => g.tag === 'hit');
-
-  if (p1HitIndex !== -1 && p1HitIndex === myGuessCount - 1) {
-    // 先攻が同じ回数目で当てていた → 先攻の勝ち
-    const result = myRole === 'p1' ? 'me' : 'opponent';
-    finishOnline(result, p1List.length, myGuessCount);
-  } else {
-    // 次のターン(先攻)へ
-    clearTimerInterval();
-    if (myRole === 'p1') {
-      renderOnlineTurn(true);
-      startTimer(() => handleTimeout());
-    } else {
-      renderOnlineTurn(false);
-    }
-  }
 }
 
 // 両者のguessesを常時監視。グローバルに最新リストを保持しておく
