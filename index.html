@@ -303,76 +303,83 @@ const db = getDatabase(app);
 const TIMER_SEC = 20;
 const SETUP_TIMER_SEC = 30;
 
-let myRole = '', roomCode = '', mySecret = 0;
-let myTurn = false, turnCount = 1, inputBuf = '';
-let listeners = [], gameOver = false;
+// ===== グローバル状態 =====
+let myRole = '';        // 'p1' または 'p2'
+let roomCode = '';
+let mySecret = 0;
+let isCPUMode = false;
+let cpuDifficulty = 'normal';
+let inputBuf = '';
+let gameOver = false;
+
 let timerInterval = null, timerLeft = TIMER_SEC;
 let setupTimerInterval = null, setupTimerLeft = SETUP_TIMER_SEC;
+let unsubscribers = [];
 let randomQueueKey = null, unsubQueue = null;
-let isCPUMode = false, cpuDifficulty = 'normal', cpuSecret = 0;
-let cpuLow = 1, cpuHigh = 100, cpuGuessed = new Set();
-let playerGuessHistory = [];
 
-// ===== タイマー =====
+// CPU専用
+let cpuSecret = 0, cpuLow = 1, cpuHigh = 100, cpuGuessed = new Set();
+let cpuMyTurn = false, cpuTurnCount = 1;
+
+// ===== ユーティリティ：円形タイマー =====
 function setCircle(id, left, total) {
   const el = document.getElementById(id);
   if (!el) return;
-  const pct = left / total;
-  // 時計回りに減る: 満タン=offset0, 空=offset126
+  const pct = Math.max(0, left) / total;
   el.style.strokeDashoffset = String(126 * (1 - pct));
-  el.setAttribute('class', 'timer-circle-fill' + (left <= (total === TIMER_SEC ? 5 : 10) ? ' danger' : ''));
 }
-
-function setNum(id, val, danger) {
+function setNum(id, val, dangerThreshold) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.textContent = val;
+  el.textContent = Math.max(0, val);
+  const danger = val <= dangerThreshold;
   el.className = 'timer-circle-num' + (danger ? ' danger' : '');
 }
 
-function startTimer() {
-  if (timerInterval) clearInterval(timerInterval);
+function startTimer(onTimeout) {
+  clearTimerInterval();
   timerLeft = TIMER_SEC;
-  setNum('timer-num', timerLeft, false);
+  setNum('timer-num', timerLeft, 5);
   setCircle('timer-circle-fill', timerLeft, TIMER_SEC);
+  document.getElementById('timer-circle-fill').setAttribute('class', 'timer-circle-fill');
   timerInterval = setInterval(() => {
     timerLeft--;
-    const danger = timerLeft <= 5;
-    setNum('timer-num', timerLeft, danger);
+    setNum('timer-num', timerLeft, 5);
     setCircle('timer-circle-fill', timerLeft, TIMER_SEC);
+    document.getElementById('timer-circle-fill').setAttribute('class', 'timer-circle-fill' + (timerLeft <= 5 ? ' danger' : ''));
     if (timerLeft <= 0) {
-      clearInterval(timerInterval); timerInterval = null;
-      if (myTurn && !gameOver) {
-        const opp = myRole === 'p1' ? 'p2' : 'p1';
-        update(ref(db, `rooms/${roomCode}`), { winner: `timeout_${myRole}`, turnCount });
-      }
+      clearTimerInterval();
+      if (onTimeout) onTimeout();
     }
   }, 1000);
 }
+function clearTimerInterval() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+}
 
 function startSetupTimer(onTimeout) {
-  if (setupTimerInterval) clearInterval(setupTimerInterval);
+  clearSetupTimer();
   setupTimerLeft = SETUP_TIMER_SEC;
-  setNum('setup-timer-num', setupTimerLeft, false);
+  setNum('setup-timer-num', setupTimerLeft, 10);
   setCircle('setup-circle-fill', setupTimerLeft, SETUP_TIMER_SEC);
   setupTimerInterval = setInterval(() => {
     setupTimerLeft--;
-    const danger = setupTimerLeft <= 10;
-    setNum('setup-timer-num', setupTimerLeft, danger);
+    setNum('setup-timer-num', setupTimerLeft, 10);
     setCircle('setup-circle-fill', setupTimerLeft, SETUP_TIMER_SEC);
+    document.getElementById('setup-circle-fill').setAttribute('class', 'timer-circle-fill' + (setupTimerLeft <= 10 ? ' danger' : ''));
     if (setupTimerLeft <= 0) {
-      clearInterval(setupTimerInterval); setupTimerInterval = null;
+      clearSetupTimer();
       onTimeout();
     }
   }, 1000);
 }
-
 function clearSetupTimer() {
   if (setupTimerInterval) { clearInterval(setupTimerInterval); setupTimerInterval = null; }
 }
 
-function clearTimerInterval() {
-  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+function clearAllListeners() {
+  unsubscribers.forEach(u => u && u());
+  unsubscribers = [];
 }
 
 // ===== 画面遷移 =====
@@ -381,47 +388,65 @@ window.showScreen = id => {
   document.getElementById(id).classList.add('active');
 };
 
-// ===== CPU =====
+// ============================================================
+// CPU戦
+// ============================================================
 window.startCPU = difficulty => {
-  isCPUMode = true; cpuDifficulty = difficulty;
+  isCPUMode = true;
+  cpuDifficulty = difficulty;
   cpuSecret = Math.floor(Math.random() * 100) + 1;
-  cpuLow = 1; cpuHigh = 100; cpuGuessed = new Set(); playerGuessHistory = [];
-  mySecret = 0; turnCount = 1; gameOver = false; inputBuf = '';
+  cpuLow = 1; cpuHigh = 100; cpuGuessed = new Set();
+  mySecret = 0;
+  gameOver = false;
+  inputBuf = '';
+
   document.getElementById('timer-wrap').style.display = 'none';
   document.getElementById('opponent-label').textContent = `CPU (${difficulty.toUpperCase()})`;
   document.getElementById('hist-theirs-label').textContent = 'CPU の予想';
   document.getElementById('res-their-label').textContent = 'CPU の数字';
+
   document.getElementById('setup-display').textContent = '—';
   document.getElementById('setup-confirm').disabled = true;
   document.getElementById('setup-confirm').textContent = 'この数字で決定';
   clearSetupTimer();
-  const tw = document.getElementById('setup-timer-wrap');
-  if (tw) tw.style.display = 'none';
-  buildSetupKeypad();
+  document.getElementById('setup-timer-wrap').style.display = 'none';
+  buildSetupKeypad(num => { mySecret = num; startCPUBattle(); });
   showScreen('screen-setup');
 };
 
-function cpuGuess() {
-  const range = Array.from({length: cpuHigh - cpuLow + 1}, (_, i) => cpuLow + i).filter(n => !cpuGuessed.has(n));
-  if (!range.length) return undefined;
-  let guess;
-  if (cpuDifficulty === 'easy') {
-    guess = Math.random() < 0.3
-      ? Math.max(cpuLow, Math.min(cpuHigh, Math.floor((cpuLow+cpuHigh)/2) + Math.floor(Math.random()*10)-5))
-      : range[Math.floor(Math.random()*range.length)];
-    if (cpuGuessed.has(guess)) guess = range[Math.floor(Math.random()*range.length)];
-  } else if (cpuDifficulty === 'normal') {
-    guess = Math.random() < 0.7 ? Math.floor((cpuLow+cpuHigh)/2) : range[Math.floor(Math.random()*range.length)];
-    if (cpuGuessed.has(guess)) guess = range[Math.floor(Math.random()*range.length)];
-  } else {
-    guess = Math.floor((cpuLow+cpuHigh)/2);
-    if (cpuGuessed.has(guess)) guess = range[Math.floor(Math.random()*range.length)];
-  }
-  cpuGuessed.add(guess);
-  return guess;
+function startCPUBattle() {
+  document.getElementById('my-number-display').textContent = mySecret;
+  document.getElementById('hist-mine').innerHTML = '';
+  document.getElementById('hist-theirs').innerHTML = '';
+  cpuMyTurn = true;
+  cpuTurnCount = 1;
+  gameOver = false;
+  showScreen('screen-battle');
+  renderCPUTurn();
 }
 
-async function doCPUTurn() {
+function renderCPUTurn() {
+  const n = document.getElementById('turn-name');
+  n.textContent = cpuMyTurn ? 'あなたのターン' : 'CPU が考えています...';
+  n.className = 'turn-name ' + (cpuMyTurn ? 'mine' : 'theirs');
+  buildBattleKeypad(cpuMyTurn, num => makeCPUGuess(num));
+}
+
+function makeCPUGuess(num) {
+  if (gameOver) return;
+  const tag = num === cpuSecret ? 'hit' : num > cpuSecret ? 'low' : 'high';
+  addHistRow(document.getElementById('hist-mine'), num, tag, 'mine');
+  if (tag === 'hit') {
+    gameOver = true;
+    setTimeout(() => showResult({ winner: 'me', mine: mySecret, theirs: cpuSecret, turns: cpuTurnCount, isCPU: true }), 300);
+    return;
+  }
+  cpuMyTurn = false;
+  renderCPUTurn();
+  setTimeout(runCPUTurn, 400);
+}
+
+async function runCPUTurn() {
   if (gameOver) return;
   const col = document.getElementById('hist-theirs');
   const thinking = document.createElement('div');
@@ -430,377 +455,477 @@ async function doCPUTurn() {
   col.appendChild(thinking);
   const thinkTime = cpuDifficulty === 'easy' ? 800 : cpuDifficulty === 'normal' ? 1200 : 1600;
   await new Promise(r => setTimeout(r, thinkTime));
-  if (!col.contains(thinking)) return;
-  col.removeChild(thinking);
+  if (col.contains(thinking)) col.removeChild(thinking);
   if (gameOver) return;
-  const guess = cpuGuess();
+
+  const guess = pickCPUGuess();
   if (guess === undefined) return;
-  let tag = guess === mySecret ? 'hit' : guess > mySecret ? 'low' : 'high';
-  if (tag === 'high') cpuLow = Math.max(cpuLow, guess+1);
-  if (tag === 'low') cpuHigh = Math.min(cpuHigh, guess-1);
+  const tag = guess === mySecret ? 'hit' : guess > mySecret ? 'low' : 'high';
+  if (tag === 'high') cpuLow = Math.max(cpuLow, guess + 1);
+  if (tag === 'low') cpuHigh = Math.min(cpuHigh, guess - 1);
   addHistRow(col, guess, tag, 'theirs');
-  if (tag === 'hit') { gameOver = true; setTimeout(() => showResult(false, mySecret, cpuSecret, turnCount, false, true, false), 500); return; }
-  myTurn = true; turnCount++;
-  updateTurnUICPU();
+
+  if (tag === 'hit') {
+    gameOver = true;
+    setTimeout(() => showResult({ winner: 'cpu', mine: mySecret, theirs: cpuSecret, turns: cpuTurnCount, isCPU: true }), 500);
+    return;
+  }
+  cpuMyTurn = true;
+  cpuTurnCount++;
+  renderCPUTurn();
 }
 
-function updateTurnUICPU() {
-  const n = document.getElementById('turn-name');
-  n.textContent = myTurn ? 'あなたのターン' : 'CPU が考えています...';
-  n.className = 'turn-name ' + (myTurn ? 'mine' : 'theirs');
-  buildBattleKeypadCPU();
-}
-
-function buildBattleKeypadCPU() {
-  const c = document.getElementById('battle-keypad');
-  c.innerHTML = ''; inputBuf = '';
-  document.getElementById('battle-display').innerHTML = '<span class="cursor"></span>';
-  ['1','2','3','4','5','6','7','8','9','0','DEL'].forEach(k => {
-    const btn = document.createElement('div');
-    btn.className = 'key' + (k==='DEL'?' del':'');
-    btn.textContent = k;
-    if (myTurn) btn.addEventListener('click', () => {
-      if (k==='DEL') inputBuf=inputBuf.slice(0,-1); else { if(inputBuf.length>=3)return; inputBuf+=k; }
-      document.getElementById('battle-display').innerHTML = (inputBuf||'')+'<span class="cursor"></span>';
-    });
-    else btn.style.opacity='0.4';
-    c.appendChild(btn);
-  });
-  const sub = document.createElement('div');
-  sub.className = `key submit ${myTurn?'on':'off'}`;
-  sub.textContent = myTurn ? '予想する' : 'CPU のターン';
-  if (myTurn) sub.addEventListener('click', makeGuessCPU);
-  c.appendChild(sub);
-}
-
-function makeGuessCPU() {
-  if (!myTurn||gameOver) return;
-  const guess = parseInt(inputBuf);
-  if (!guess||guess<1||guess>100) return;
-  let tag = guess===cpuSecret?'hit':guess>cpuSecret?'low':'high';
-  playerGuessHistory.push({num:guess,tag});
-  addHistRow(document.getElementById('hist-mine'), guess, tag, 'mine');
-  if (tag==='hit') { gameOver=true; setTimeout(()=>showResult(true,mySecret,cpuSecret,turnCount,false,true,false),300); return; }
-  myTurn=false; updateTurnUICPU(); setTimeout(()=>doCPUTurn(),400);
-}
-
-// ===== オンライン =====
-window.startRandom = async () => {
-  isCPUMode=false;
-  document.getElementById('timer-wrap').style.display='';
-  document.getElementById('opponent-label').textContent='相手';
-  document.getElementById('hist-theirs-label').textContent='相手の予想';
-  document.getElementById('res-their-label').textContent='相手の数字';
-  showScreen('screen-random');
-  const queueRef = ref(db,'queue');
-  const snap = await get(queueRef);
-  const queue = snap.val()||{};
-  const waiting = Object.entries(queue).find(([k,v])=>v.status==='waiting');
-  if (waiting) {
-    const [key,data] = waiting;
-    await remove(ref(db,`queue/${key}`));
-    roomCode=data.roomCode; myRole='p2';
-    await update(ref(db,`rooms/${roomCode}`),{status:'setup'});
-    showSetup();
+function pickCPUGuess() {
+  const range = [];
+  for (let n = cpuLow; n <= cpuHigh; n++) if (!cpuGuessed.has(n)) range.push(n);
+  if (!range.length) return undefined;
+  let guess;
+  if (cpuDifficulty === 'easy') {
+    guess = Math.random() < 0.3
+      ? Math.max(cpuLow, Math.min(cpuHigh, Math.floor((cpuLow + cpuHigh) / 2) + Math.floor(Math.random() * 10) - 5))
+      : range[Math.floor(Math.random() * range.length)];
+  } else if (cpuDifficulty === 'normal') {
+    guess = Math.random() < 0.7 ? Math.floor((cpuLow + cpuHigh) / 2) : range[Math.floor(Math.random() * range.length)];
   } else {
-    const code = Math.floor(1000+Math.random()*9000).toString();
-    roomCode=code; myRole='p1';
-    await set(ref(db,`rooms/${code}`),{
-      p1Ready:false,p2Ready:false,p1Secret:0,p2Secret:0,
-      currentTurn:'p1',turnCount:1,status:'waiting',winner:'',
-      guesses:{p1:[],p2:[]},p1HitTurn:-1,p2HitTurn:-1
+    guess = Math.floor((cpuLow + cpuHigh) / 2);
+  }
+  if (cpuGuessed.has(guess)) guess = range[Math.floor(Math.random() * range.length)];
+  cpuGuessed.add(guess);
+  return guess;
+}
+
+// ============================================================
+// オンライン対戦（共通基盤）
+// ============================================================
+
+// ルームのデータ構造:
+// rooms/{code}/p1Secret, p2Secret, p1Ready, p2Ready, status
+// rooms/{code}/guesses/p1/{turnIndex} = {num, tag}   ← リストではなくpushキーで追加
+// rooms/{code}/guesses/p2/{turnIndex} = {num, tag}
+// 勝敗はクライアント側で「両者のguessesを見て」判定する。Firebase側にwinnerは書かない。
+
+window.startRandom = async () => {
+  isCPUMode = false;
+  setupOnlineUI();
+  showScreen('screen-random');
+
+  const queueRef = ref(db, 'queue');
+  const snap = await get(queueRef);
+  const queue = snap.val() || {};
+  const waitingEntry = Object.entries(queue).find(([k, v]) => v && v.status === 'waiting');
+
+  if (waitingEntry) {
+    const [key, data] = waitingEntry;
+    await remove(ref(db, `queue/${key}`));
+    roomCode = data.roomCode;
+    myRole = 'p2';
+    await update(ref(db, `rooms/${roomCode}`), { status: 'setup' });
+    showSetupOnline();
+  } else {
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
+    roomCode = code;
+    myRole = 'p1';
+    await set(ref(db, `rooms/${code}`), {
+      p1Ready: false, p2Ready: false,
+      p1Secret: 0, p2Secret: 0,
+      status: 'waiting',
     });
-    const newRef = await push(queueRef,{roomCode:code,status:'waiting'});
-    randomQueueKey=newRef.key;
-    unsubQueue = onValue(ref(db,`rooms/${code}/status`), snap=>{
-      if (snap.val()==='setup') { if(unsubQueue){unsubQueue();unsubQueue=null;} showSetup(); }
+    const newRef = await push(queueRef, { roomCode: code, status: 'waiting' });
+    randomQueueKey = newRef.key;
+    unsubQueue = onValue(ref(db, `rooms/${code}/status`), s => {
+      if (s.val() === 'setup') {
+        if (unsubQueue) { unsubQueue(); unsubQueue = null; }
+        showSetupOnline();
+      }
     });
   }
 };
 
 window.cancelRandom = async () => {
-  if(unsubQueue){unsubQueue();unsubQueue=null;}
-  if(randomQueueKey){await remove(ref(db,`queue/${randomQueueKey}`)).catch(()=>{}); randomQueueKey=null;}
-  if(roomCode){await remove(ref(db,`rooms/${roomCode}`)).catch(()=>{}); roomCode='';}
+  if (unsubQueue) { unsubQueue(); unsubQueue = null; }
+  if (randomQueueKey) { await remove(ref(db, `queue/${randomQueueKey}`)).catch(() => {}); randomQueueKey = null; }
+  if (roomCode) { await remove(ref(db, `rooms/${roomCode}`)).catch(() => {}); roomCode = ''; }
   showScreen('screen-title');
 };
 
 window.showCreateRoom = async () => {
-  isCPUMode=false;
-  document.getElementById('timer-wrap').style.display='';
-  document.getElementById('opponent-label').textContent='相手';
-  document.getElementById('hist-theirs-label').textContent='相手の予想';
-  document.getElementById('res-their-label').textContent='相手の数字';
-  const code = Math.floor(1000+Math.random()*9000).toString();
-  roomCode=code; myRole='p1';
-  await set(ref(db,`rooms/${code}`),{
-    p1Ready:false,p2Ready:false,p1Secret:0,p2Secret:0,
-    currentTurn:'p1',turnCount:1,status:'waiting',winner:'',
-    guesses:{p1:[],p2:[]},p1HitTurn:-1,p2HitTurn:-1
+  isCPUMode = false;
+  setupOnlineUI();
+  const code = Math.floor(1000 + Math.random() * 9000).toString();
+  roomCode = code;
+  myRole = 'p1';
+  await set(ref(db, `rooms/${code}`), {
+    p1Ready: false, p2Ready: false,
+    p1Secret: 0, p2Secret: 0,
+    status: 'waiting',
   });
-  document.getElementById('wait-code').textContent=code;
+  document.getElementById('wait-code').textContent = code;
   showScreen('screen-wait');
-  const unsub = onValue(ref(db,`rooms/${code}/status`),snap=>{
-    if(snap.val()==='setup'){unsub();showSetup();}
+  const unsub = onValue(ref(db, `rooms/${code}/status`), s => {
+    if (s.val() === 'setup') { unsub(); showSetupOnline(); }
   });
 };
 
 window.cancelRoom = async () => {
-  if(roomCode) await remove(ref(db,`rooms/${roomCode}`)).catch(()=>{});
-  roomCode=''; showScreen('screen-friend');
+  if (roomCode) await remove(ref(db, `rooms/${roomCode}`)).catch(() => {});
+  roomCode = '';
+  showScreen('screen-friend');
 };
 
 window.showJoin = () => {
-  inputBuf='';
-  document.getElementById('join-display').textContent='—';
-  document.getElementById('join-error').textContent='';
-  buildJoinKeypad(); showScreen('screen-join');
+  inputBuf = '';
+  document.getElementById('join-display').textContent = '—';
+  document.getElementById('join-error').textContent = '';
+  buildJoinKeypad();
+  showScreen('screen-join');
 };
 
 function buildJoinKeypad() {
   const c = document.getElementById('join-keypad');
-  c.innerHTML='';
-  ['1','2','3','4','5','6','7','8','9','0','DEL','JOIN'].forEach(k=>{
-    const btn=document.createElement('div');
-    if(k==='JOIN'){
-      btn.className='key submit on'; btn.textContent='参加する';
-      btn.addEventListener('click',joinRoom);
+  c.innerHTML = '';
+  let buf = '';
+  ['1','2','3','4','5','6','7','8','9','0','DEL','JOIN'].forEach(k => {
+    const btn = document.createElement('div');
+    if (k === 'JOIN') {
+      btn.className = 'key submit on';
+      btn.textContent = '参加する';
+      btn.addEventListener('click', () => joinRoom(buf));
     } else {
-      btn.className='key'+(k==='DEL'?' del':''); btn.textContent=k;
-      btn.addEventListener('click',()=>{
-        if(k==='DEL') inputBuf=inputBuf.slice(0,-1); else{if(inputBuf.length>=4)return;inputBuf+=k;}
-        document.getElementById('join-display').textContent=inputBuf||'—';
+      btn.className = 'key' + (k === 'DEL' ? ' del' : '');
+      btn.textContent = k;
+      btn.addEventListener('click', () => {
+        if (k === 'DEL') buf = buf.slice(0, -1);
+        else { if (buf.length >= 4) return; buf += k; }
+        document.getElementById('join-display').textContent = buf || '—';
       });
     }
     c.appendChild(btn);
   });
 }
 
-async function joinRoom() {
-  const code=inputBuf;
-  if(code.length!==4){document.getElementById('join-error').textContent='4桁のコードを入力してください';return;}
-  const snap=await get(ref(db,`rooms/${code}`));
-  if(!snap.exists()){document.getElementById('join-error').textContent='ルームが見つかりません';return;}
-  if(snap.val().status!=='waiting'){document.getElementById('join-error').textContent='このルームは参加できません';return;}
-  isCPUMode=false;
-  document.getElementById('timer-wrap').style.display='';
-  document.getElementById('opponent-label').textContent='相手';
-  document.getElementById('hist-theirs-label').textContent='相手の予想';
-  document.getElementById('res-their-label').textContent='相手の数字';
-  roomCode=code; myRole='p2';
-  await update(ref(db,`rooms/${code}`),{status:'setup'});
-  showSetup();
+async function joinRoom(code) {
+  if (code.length !== 4) { document.getElementById('join-error').textContent = '4桁のコードを入力してください'; return; }
+  const snap = await get(ref(db, `rooms/${code}`));
+  if (!snap.exists()) { document.getElementById('join-error').textContent = 'ルームが見つかりません'; return; }
+  if (snap.val().status !== 'waiting') { document.getElementById('join-error').textContent = 'このルームは参加できません'; return; }
+
+  isCPUMode = false;
+  setupOnlineUI();
+  roomCode = code;
+  myRole = 'p2';
+  await update(ref(db, `rooms/${code}`), { status: 'setup' });
+  showSetupOnline();
 }
 
-function showSetup() {
-  inputBuf='';
-  document.getElementById('setup-display').textContent='—';
-  document.getElementById('setup-confirm').disabled=true;
-  document.getElementById('setup-confirm').textContent='この数字で決定';
-  const tw=document.getElementById('setup-timer-wrap');
-  if(tw) tw.style.display='';
-  buildSetupKeypad(); showScreen('screen-setup');
-  startSetupTimer(()=>{
-    const r=Math.floor(Math.random()*100)+1;
-    inputBuf=r.toString();
-    document.getElementById('setup-display').textContent=inputBuf;
-    document.getElementById('setup-confirm').disabled=false;
-    confirmSecret();
-  });
+function setupOnlineUI() {
+  document.getElementById('timer-wrap').style.display = '';
+  document.getElementById('opponent-label').textContent = '相手';
+  document.getElementById('hist-theirs-label').textContent = '相手の予想';
+  document.getElementById('res-their-label').textContent = '相手の数字';
 }
 
-function buildSetupKeypad() {
-  const c=document.getElementById('setup-keypad'); c.innerHTML='';
-  ['1','2','3','4','5','6','7','8','9','0','DEL'].forEach(k=>{
-    const btn=document.createElement('div');
-    btn.className='key'+(k==='DEL'?' del':''); btn.textContent=k;
-    btn.addEventListener('click',()=>{
-      if(k==='DEL') inputBuf=inputBuf.slice(0,-1); else{if(inputBuf.length>=3)return;inputBuf+=k;}
-      const num=parseInt(inputBuf)||0;
-      document.getElementById('setup-display').textContent=inputBuf||'—';
-      document.getElementById('setup-confirm').disabled=!(num>=1&&num<=100);
+// ===== 数字設定 =====
+function buildSetupKeypad(onConfirm) {
+  const c = document.getElementById('setup-keypad');
+  c.innerHTML = '';
+  let buf = '';
+  const display = document.getElementById('setup-display');
+  const confirmBtn = document.getElementById('setup-confirm');
+
+  ['1','2','3','4','5','6','7','8','9','0','DEL'].forEach(k => {
+    const btn = document.createElement('div');
+    btn.className = 'key' + (k === 'DEL' ? ' del' : '');
+    btn.textContent = k;
+    btn.addEventListener('click', () => {
+      if (k === 'DEL') buf = buf.slice(0, -1);
+      else { if (buf.length >= 3) return; buf += k; }
+      const num = parseInt(buf) || 0;
+      display.textContent = buf || '—';
+      confirmBtn.disabled = !(num >= 1 && num <= 100);
     });
     c.appendChild(btn);
   });
+
+  confirmBtn.onclick = () => {
+    const num = parseInt(buf);
+    if (!num || num < 1 || num > 100) return;
+    clearSetupTimer();
+    onConfirm(num);
+  };
+
+  // タイムアウト時に使うため、bufを外から読めるようにする
+  buildSetupKeypad._getBuf = () => buf;
+  buildSetupKeypad._setBuf = (v) => {
+    buf = v;
+    display.textContent = buf || '—';
+    confirmBtn.disabled = false;
+  };
 }
 
-window.confirmSecret = async () => {
-  const num=parseInt(inputBuf);
-  if(!num||isNaN(num)||num<1||num>100) return;
-  clearSetupTimer();
-  mySecret=num;
-  document.getElementById('my-number-display').textContent=mySecret;
-  if(isCPUMode){
-    document.getElementById('hist-mine').innerHTML='';
-    document.getElementById('hist-theirs').innerHTML='';
-    myTurn=true; turnCount=1; gameOver=false;
-    updateTurnUICPU(); showScreen('screen-battle'); return;
-  }
-  await update(ref(db,`rooms/${roomCode}`),{[`${myRole}Secret`]:num,[`${myRole}Ready`]:true});
-  document.getElementById('setup-confirm').disabled=true;
-  document.getElementById('setup-confirm').textContent='相手を待っています...';
-  const unsub=onValue(ref(db,`rooms/${roomCode}`),snap=>{
-    const d=snap.val();
-    if(d&&d.p1Ready&&d.p2Ready){unsub();startOnlineBattle();}
+function showSetupOnline() {
+  document.getElementById('setup-display').textContent = '—';
+  document.getElementById('setup-confirm').disabled = true;
+  document.getElementById('setup-confirm').textContent = 'この数字で決定';
+  document.getElementById('setup-timer-wrap').style.display = '';
+
+  buildSetupKeypad(async (num) => {
+    mySecret = num;
+    document.getElementById('my-number-display').textContent = mySecret;
+    await set(ref(db, `rooms/${roomCode}/${myRole}Secret`), num);
+    await set(ref(db, `rooms/${roomCode}/${myRole}Ready`), true);
+    document.getElementById('setup-confirm').disabled = true;
+    document.getElementById('setup-confirm').textContent = '相手を待っています...';
+
+    const unsub = onValue(ref(db, `rooms/${roomCode}`), snap => {
+      const d = snap.val();
+      if (d && d.p1Ready && d.p2Ready) {
+        unsub();
+        startOnlineBattle();
+      }
+    });
   });
-};
+
+  showScreen('screen-setup');
+
+  startSetupTimer(() => {
+    const randomNum = Math.floor(Math.random() * 100) + 1;
+    buildSetupKeypad._setBuf(String(randomNum));
+    document.getElementById('setup-confirm').onclick();
+  });
+}
+
+// ===== オンラインバトル本体 =====
+// guessesは push() で追加し、各エントリは {by: 'p1'|'p2', num, tag, seq}
+// seq はグローバルな連番（1から始まる、自分が打った何回目の予想か全体での順序）
+let battleState = null; // { myGuesses: [], theirGuesses: [] }
 
 function startOnlineBattle() {
-  gameOver=false; turnCount=1; inputBuf='';
-  document.getElementById('hist-mine').innerHTML='';
-  document.getElementById('hist-theirs').innerHTML='';
-  myTurn=myRole==='p1';
+  gameOver = false;
+  document.getElementById('hist-mine').innerHTML = '';
+  document.getElementById('hist-theirs').innerHTML = '';
+  battleState = { myGuesses: [], theirGuesses: [] };
+
+  const myTurnNow = myRole === 'p1'; // p1が先攻
+  renderOnlineTurn(myTurnNow);
+  if (myTurnNow) startTimer(() => handleTimeout());
+
   showScreen('screen-battle');
-  updateTurnUI();
-  startTimer();
-  listenBattle();
+  listenOnlineGuesses();
 }
 
-function listenBattle() {
-  const opp=myRole==='p1'?'p2':'p1';
-  let firstTurn=true;
-
-  const unsubTurn=onValue(ref(db,`rooms/${roomCode}/currentTurn`),snap=>{
-    if(gameOver) return;
-    if(firstTurn){firstTurn=false;return;}
-    myTurn=snap.val()===myRole;
-    updateTurnUI(); startTimer();
-  });
-
-  const unsubCount=onValue(ref(db,`rooms/${roomCode}/turnCount`),snap=>{
-    if(snap.val()) turnCount=snap.val();
-  });
-
-  const unsubGuess=onValue(ref(db,`rooms/${roomCode}/guesses/${opp}`),snap=>{
-    if(gameOver) return;
-    const raw=snap.val();
-    const guesses=raw ? (Array.isArray(raw) ? raw : Object.values(raw)) : [];
-    const col=document.getElementById('hist-theirs');
-    col.innerHTML='';
-    guesses.forEach(g=>addHistRow(col,g.num,g.tag,'theirs'));
-  });
-
-  const unsubWinner=onValue(ref(db,`rooms/${roomCode}/winner`),snap=>{
-    const winner=snap.val();
-    if(!winner||winner==='') return;
-    if(gameOver&&winner!=='draw') return;
-    gameOver=true; clearTimerInterval();
-    const isDraw=winner==='draw';
-    const iWon=!isDraw&&(winner===myRole||winner===`timeout_${opp}`);
-    const isTimeout=typeof winner==='string'&&winner.startsWith('timeout_');
-    get(ref(db,`rooms/${roomCode}`)).then(s=>{
-      const d=s.val();
-      const myNum=myRole==='p1'?d.p1Secret:d.p2Secret;
-      const theirNum=myRole==='p1'?d.p2Secret:d.p1Secret;
-      showResult(iWon,myNum,theirNum,d.turnCount,isTimeout,false,isDraw);
-    });
-  });
-
-  listeners=[unsubTurn,unsubCount,unsubGuess,unsubWinner];
+function renderOnlineTurn(myTurn) {
+  const n = document.getElementById('turn-name');
+  n.textContent = myTurn ? 'あなたのターン' : '相手のターン...';
+  n.className = 'turn-name ' + (myTurn ? 'mine' : 'theirs');
+  buildBattleKeypad(myTurn, num => submitOnlineGuess(num));
 }
 
-function updateTurnUI() {
-  const n=document.getElementById('turn-name');
-  n.textContent=myTurn?'あなたのターン':'相手のターン...';
-  n.className='turn-name '+(myTurn?'mine':'theirs');
-  buildBattleKeypad();
-}
-
-function buildBattleKeypad() {
-  const c=document.getElementById('battle-keypad');
-  c.innerHTML=''; inputBuf='';
-  document.getElementById('battle-display').innerHTML='<span class="cursor"></span>';
-  ['1','2','3','4','5','6','7','8','9','0','DEL'].forEach(k=>{
-    const btn=document.createElement('div');
-    btn.className='key'+(k==='DEL'?' del':''); btn.textContent=k;
-    if(myTurn) btn.addEventListener('click',()=>{
-      if(k==='DEL') inputBuf=inputBuf.slice(0,-1); else{if(inputBuf.length>=3)return;inputBuf+=k;}
-      document.getElementById('battle-display').innerHTML=(inputBuf||'')+'<span class="cursor"></span>';
-    });
-    else btn.style.opacity='0.4';
-    c.appendChild(btn);
-  });
-  const sub=document.createElement('div');
-  sub.className=`key submit ${myTurn?'on':'off'}`;
-  sub.textContent=myTurn?'予想する':'相手のターン';
-  if(myTurn) sub.addEventListener('click',makeGuess);
-  c.appendChild(sub);
-}
-
-async function makeGuess() {
-  if(!myTurn||gameOver) return;
-  const guess=parseInt(inputBuf);
-  if(!guess||guess<1||guess>100) return;
+async function submitOnlineGuess(num) {
+  if (gameOver) return;
   clearTimerInterval();
-  const opp=myRole==='p1'?'p2':'p1';
-  const snap=await get(ref(db,`rooms/${roomCode}/${opp}Secret`));
-  const theirSecret=snap.val();
-  let tag=guess===theirSecret?'hit':guess>theirSecret?'low':'high';
-  addHistRow(document.getElementById('hist-mine'),guess,tag,'mine');
-  const gSnap=await get(ref(db,`rooms/${roomCode}/guesses/${myRole}`));
-  const guesses=gSnap.val()||[];
-  guesses.push({num:guess,tag});
 
-  if(tag==='hit'){
-    await set(ref(db,`rooms/${roomCode}/guesses/${myRole}`),guesses);
-    await update(ref(db,`rooms/${roomCode}`),{[`${myRole}HitTurn`]:turnCount});
-    const roomSnap=await get(ref(db,`rooms/${roomCode}`));
-    const d=roomSnap.val();
-    const oppHitTurn=d[`${opp}HitTurn`];
-    if(oppHitTurn!==undefined&&oppHitTurn!==-1&&oppHitTurn===turnCount){
-      await update(ref(db,`rooms/${roomCode}`),{winner:'draw',turnCount});
-    } else if(!d.winner||d.winner===''){
-      await update(ref(db,`rooms/${roomCode}`),{winner:myRole,turnCount});
-    }
+  const oppRole = myRole === 'p1' ? 'p2' : 'p1';
+  const oppSecretSnap = await get(ref(db, `rooms/${roomCode}/${oppRole}Secret`));
+  const oppSecret = oppSecretSnap.val();
+  const tag = num === oppSecret ? 'hit' : num > oppSecret ? 'low' : 'high';
+
+  // 自分の予想を即座にローカル表示
+  addHistRow(document.getElementById('hist-mine'), num, tag, 'mine');
+
+  // Firebaseにpushで追加（自動でユニークキーが振られる。これが追加順の同期にも使える）
+  await push(ref(db, `rooms/${roomCode}/guesses/${myRole}`), { num, tag, ts: Date.now() });
+
+  if (tag === 'hit') {
+    // 自分がHITしたことを「結果確定待ち」状態にする。
+    // ローカルではまだ相手に決着がついたかわからないので、少し待って判定する。
+    document.getElementById('turn-name').textContent = '結果を確認中...';
+    document.getElementById('turn-name').className = 'turn-name theirs';
+    buildBattleKeypad(false, () => {});
+    // 同時HIT判定のため、少し待って両者のguessesを再取得して判定
+    setTimeout(() => resolveOnlineResult(), 1200);
     return;
   }
 
-  const nextTurn=opp;
-  const nextCount=myRole==='p2'?turnCount+1:turnCount;
-  await set(ref(db,`rooms/${roomCode}/guesses/${myRole}`),guesses);
-  await update(ref(db,`rooms/${roomCode}`),{
-    currentTurn:nextTurn,
-    turnCount:nextCount,
-  });
-  inputBuf='';
-  document.getElementById('battle-display').innerHTML='<span class="cursor"></span>';
+  // ミスなら相手のターンへ。相手のターンに移ったことは、相手側のguessesのonValueで検知される
+  renderOnlineTurn(false);
 }
 
-function addHistRow(col,num,tag,side){
-  const row=document.createElement('div');
-  row.className=`hist-row ${side}`;
-  const tagText=tag==='hit'?'HIT!!':tag==='high'?'HIGH':'LOW';
-  const color=side==='mine'?'var(--p1)':'var(--p2)';
-  row.innerHTML=`<span class="hist-num" style="color:${color}">${num}</span><span class="hist-tag ${tag}">${tagText}</span>`;
-  col.appendChild(row); col.scrollTop=col.scrollHeight;
-}
+async function resolveOnlineResult() {
+  if (gameOver) return;
+  const myGSnap = await get(ref(db, `rooms/${roomCode}/guesses/${myRole}`));
+  const oppRole = myRole === 'p1' ? 'p2' : 'p1';
+  const oppGSnap = await get(ref(db, `rooms/${roomCode}/guesses/${oppRole}`));
 
-function showResult(iWon,myNum,theirNum,turns,isTimeout,isCPU,isDraw){
-  listeners.forEach(u=>u&&u()); clearTimerInterval();
-  const cpuLabel=isCPU?`CPU (${cpuDifficulty.toUpperCase()})`:'相手';
-  if(isDraw){
-    document.getElementById('result-emoji').textContent='🤝';
-    document.getElementById('result-title').textContent='引き分け！';
-    document.getElementById('result-title').style.color='var(--correct)';
-    document.getElementById('result-sub').textContent='同じターンで同時に正解！';
+  const myList = flattenGuesses(myGSnap.val());
+  const oppList = flattenGuesses(oppGSnap.val());
+
+  const myHitIndex = myList.findIndex(g => g.tag === 'hit');
+  const oppHitIndex = oppList.findIndex(g => g.tag === 'hit');
+
+  if (myHitIndex === -1) return; // まだ自分のHITが見えない（通常起きない）
+
+  if (oppHitIndex !== -1 && oppHitIndex === myHitIndex) {
+    // 同じ手数（ターン）で両者命中 → 引き分け
+    finishOnline('draw', myList.length, oppList.length);
+  } else if (oppHitIndex !== -1 && oppHitIndex < myHitIndex) {
+    // 相手が自分より少ない手数でHITしている → 相手の勝ち
+    finishOnline('opponent', myList.length, oppList.length);
   } else {
-    document.getElementById('result-emoji').textContent=iWon?'🏆':'😢';
-    document.getElementById('result-title').textContent=iWon?'あなたの勝利！':`${cpuLabel}の勝利...`;
-    document.getElementById('result-title').style.color=iWon?'var(--p1)':'var(--p2)';
-    document.getElementById('result-sub').textContent=isTimeout?'時間切れで決着':`${turns} ターンで決着`;
+    // 相手はまだHITしていない、または自分より手数が多い → 自分の勝ち
+    finishOnline('me', myList.length, oppList.length);
   }
-  document.getElementById('res-mine').textContent=myNum;
-  document.getElementById('res-theirs').textContent=theirNum;
-  document.getElementById('res-turn').textContent=turns;
+}
+
+function flattenGuesses(raw) {
+  if (!raw) return [];
+  return Object.keys(raw).sort().map(k => raw[k]);
+}
+
+function finishOnline(result, myTurns, theirTurns) {
+  if (gameOver) return;
+  gameOver = true;
+  clearTimerInterval();
+  clearAllListeners();
+
+  get(ref(db, `rooms/${roomCode}`)).then(s => {
+    const d = s.val();
+    const myNum = myRole === 'p1' ? d.p1Secret : d.p2Secret;
+    const theirNum = myRole === 'p1' ? d.p2Secret : d.p1Secret;
+    showResult({
+      winner: result === 'draw' ? 'draw' : (result === 'me' ? 'me' : 'cpu_or_opp'),
+      mine: myNum, theirs: theirNum,
+      turns: Math.max(myTurns, theirTurns),
+      isCPU: false,
+    });
+  });
+}
+
+function handleTimeout() {
+  if (gameOver) return;
+  finishOnline('opponent', 0, 0); // 自分がタイムアウト→負け
+}
+
+// 相手の予想をリアルタイムに反映する監視
+function listenOnlineGuesses() {
+  const oppRole = myRole === 'p1' ? 'p2' : 'p1';
+  let lastSeenCount = 0;
+
+  const unsub = onValue(ref(db, `rooms/${roomCode}/guesses/${oppRole}`), snap => {
+    if (gameOver) return;
+    const list = flattenGuesses(snap.val());
+
+    // 新しく増えた分だけ描画
+    const col = document.getElementById('hist-theirs');
+    col.innerHTML = '';
+    list.forEach(g => addHistRow(col, g.num, g.tag, 'theirs'));
+
+    if (list.length > lastSeenCount) {
+      lastSeenCount = list.length;
+      const last = list[list.length - 1];
+
+      if (last.tag === 'hit') {
+        // 相手がHITした。自分もすでにHIT済みか確認してから決着判定
+        setTimeout(() => resolveOnlineResult(), 300);
+      } else {
+        // 相手がミスした → 自分のターンになる
+        clearTimerInterval();
+        renderOnlineTurn(true);
+        startTimer(() => handleTimeout());
+      }
+    }
+  });
+
+  unsubscribers.push(unsub);
+}
+
+// ============================================================
+// 共通UI部品
+// ============================================================
+function buildBattleKeypad(active, onSubmit) {
+  const c = document.getElementById('battle-keypad');
+  c.innerHTML = '';
+  let buf = '';
+  const display = document.getElementById('battle-display');
+  display.innerHTML = '<span class="cursor"></span>';
+
+  ['1','2','3','4','5','6','7','8','9','0','DEL'].forEach(k => {
+    const btn = document.createElement('div');
+    btn.className = 'key' + (k === 'DEL' ? ' del' : '');
+    btn.textContent = k;
+    if (active) {
+      btn.addEventListener('click', () => {
+        if (k === 'DEL') buf = buf.slice(0, -1);
+        else { if (buf.length >= 3) return; buf += k; }
+        display.innerHTML = (buf || '') + '<span class="cursor"></span>';
+      });
+    } else {
+      btn.style.opacity = '0.4';
+    }
+    c.appendChild(btn);
+  });
+
+  const sub = document.createElement('div');
+  sub.className = `key submit ${active ? 'on' : 'off'}`;
+  sub.textContent = active ? '予想する' : '相手のターン';
+  if (active) {
+    sub.addEventListener('click', () => {
+      const num = parseInt(buf);
+      if (!num || num < 1 || num > 100) return;
+      onSubmit(num);
+    });
+  }
+  c.appendChild(sub);
+}
+
+function addHistRow(col, num, tag, side) {
+  const row = document.createElement('div');
+  row.className = `hist-row ${side}`;
+  const tagText = tag === 'hit' ? 'HIT!!' : tag === 'high' ? 'HIGH' : 'LOW';
+  const color = side === 'mine' ? 'var(--p1)' : 'var(--p2)';
+  row.innerHTML = `<span class="hist-num" style="color:${color}">${num}</span><span class="hist-tag ${tag}">${tagText}</span>`;
+  col.appendChild(row);
+  col.scrollTop = col.scrollHeight;
+}
+
+function showResult({ winner, mine, theirs, turns, isCPU }) {
+  clearTimerInterval();
+  clearAllListeners();
+
+  const emoji = document.getElementById('result-emoji');
+  const title = document.getElementById('result-title');
+  const sub = document.getElementById('result-sub');
+
+  if (winner === 'draw') {
+    emoji.textContent = '🤝';
+    title.textContent = '引き分け！';
+    title.style.color = 'var(--correct)';
+    sub.textContent = '同じ手数で同時に正解！';
+  } else if (winner === 'me') {
+    emoji.textContent = '🏆';
+    title.textContent = 'あなたの勝利！';
+    title.style.color = 'var(--p1)';
+    sub.textContent = `${turns} ターンで決着`;
+  } else {
+    emoji.textContent = '😢';
+    title.textContent = isCPU ? `CPU (${cpuDifficulty.toUpperCase()}) の勝利...` : '相手の勝利...';
+    title.style.color = 'var(--p2)';
+    sub.textContent = `${turns} ターンで決着`;
+  }
+
+  document.getElementById('res-mine').textContent = mine;
+  document.getElementById('res-theirs').textContent = theirs;
+  document.getElementById('res-turn').textContent = turns;
   showScreen('screen-result');
 }
 
 window.resetGame = async () => {
-  clearTimerInterval(); clearSetupTimer();
-  listeners.forEach(u=>u&&u()); listeners=[];
-  if(!isCPUMode&&roomCode) await remove(ref(db,`rooms/${roomCode}`)).catch(()=>{});
-  roomCode=''; myRole=''; mySecret=0; myTurn=false; turnCount=1; inputBuf=''; gameOver=false;
-  isCPUMode=false; cpuSecret=0; cpuLow=1; cpuHigh=100; cpuGuessed=new Set(); playerGuessHistory=[];
+  clearTimerInterval();
+  clearSetupTimer();
+  clearAllListeners();
+  if (!isCPUMode && roomCode) await remove(ref(db, `rooms/${roomCode}`)).catch(() => {});
+  roomCode = ''; myRole = ''; mySecret = 0; gameOver = false; isCPUMode = false;
+  cpuSecret = 0; cpuLow = 1; cpuHigh = 100; cpuGuessed = new Set();
+  battleState = null;
   showScreen('screen-title');
 };
 </script>
