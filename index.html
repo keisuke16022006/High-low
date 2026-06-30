@@ -740,38 +740,29 @@ async function submitOnlineGuess(num) {
   await push(ref(db, `rooms/${roomCode}/guesses/${myRole}`), { num, tag, ts: Date.now() });
 
   if (myRole === 'p1') {
-    // 先攻(p1)が予想した直後
     if (tag === 'hit') {
-      // 先攻が当てた → すぐには終わらせず、後攻(p2)に同じ回数目の最後の1回を打たせる
       document.getElementById('turn-name').textContent = '相手の最後のチャンス...';
       document.getElementById('turn-name').className = 'turn-name theirs';
       buildBattleKeypad(false, () => {});
-      // 後攻のguesses監視が、この状況を検知して後攻のターンを開始させる
     } else {
-      // 外した → 普通に後攻のターンへ
       renderOnlineTurn(false);
     }
   } else {
-    // 後攻(p2)が予想した直後。myCountが「今打った回数」として確実
-    const p1List = window.__p1List || [];
+    // 後攻(p2)が予想した直後。p1のリストをFirebaseから直接取得して確実に判定
+    const p1Snap = await get(ref(db, `rooms/${roomCode}/guesses/p1`));
+    const p1List = flattenGuesses(p1Snap.val());
     const p1HitIndex = p1List.findIndex(g => g.tag === 'hit');
 
     if (tag === 'hit') {
-      // 後攻が当てた
       if (p1HitIndex !== -1 && p1HitIndex === myCount - 1) {
-        // 先攻も同じ回数目で当てていた → 引き分け
         finishOnline('draw', p1List.length, myCount);
       } else {
-        // 先攻はまだ当てていない（後攻が先に当てた） → 後攻の勝ち
         finishOnline('me', p1List.length, myCount);
       }
     } else {
-      // 後攻が外した
       if (p1HitIndex !== -1 && p1HitIndex === myCount - 1) {
-        // 先攻が同じ回数目で当てていた → 先攻の勝ち
         finishOnline('opponent', p1List.length, myCount);
       } else {
-        // 次のターン(先攻)へ
         clearTimerInterval();
         renderOnlineTurn(false);
       }
@@ -862,31 +853,35 @@ function listenOnlineGuesses() {
       p2PrevLen = window.__p2List.length;
 
       if (myRole === 'p1' && !gameOver) {
-        const last = window.__p2List[window.__p2List.length - 1];
-        const p1List = window.__p1List || [];
-        const p1HitIndex = p1List.findIndex(g => g.tag === 'hit');
+        (async () => {
+          // p1自身のリストも直接取得し直して確実にする
+          const p1Snap = await get(ref(db, `rooms/${roomCode}/guesses/p1`));
+          const p1List = flattenGuesses(p1Snap.val());
+          const p1HitIndex = p1List.findIndex(g => g.tag === 'hit');
+          const p2List = window.__p2List;
+          const last = p2List[p2List.length - 1];
 
-        if (last.tag === 'hit') {
-          // 後攻が当てた
-          if (p1HitIndex !== -1 && p1HitIndex === window.__p2List.length - 1) {
-            // 先攻も同じ回数目で当てていた → 引き分け
-            finishOnline('draw', p1List.length, window.__p2List.length);
+          if (gameOver) return;
+
+          if (last.tag === 'hit') {
+            // 後攻が当てた
+            if (p1HitIndex !== -1 && p1HitIndex === p2List.length - 1) {
+              finishOnline('draw', p1List.length, p2List.length);
+            } else {
+              finishOnline('opponent', p1List.length, p2List.length);
+            }
           } else {
-            // 先攻はまだ当てていない（後攻が先に当てた） → 後攻の勝ち = 自分(先攻)の負け
-            finishOnline('opponent', p1List.length, window.__p2List.length);
+            // 後攻が外した
+            if (p1HitIndex !== -1 && p1HitIndex === p2List.length - 1) {
+              finishOnline('me', p1List.length, p2List.length);
+            } else {
+              // まだ決着つかず、次は自分(先攻)のターン
+              clearTimerInterval();
+              renderOnlineTurn(true);
+              startTimer(() => handleTimeout());
+            }
           }
-        } else {
-          // 後攻が外した
-          if (p1HitIndex !== -1 && p1HitIndex === window.__p2List.length - 1) {
-            // 先攻が同じ回数目で当てていた → 先攻の勝ち = 自分の勝ち
-            finishOnline('me', p1List.length, window.__p2List.length);
-          } else {
-            // まだ決着つかず、次は自分(先攻)のターン
-            clearTimerInterval();
-            renderOnlineTurn(true);
-            startTimer(() => handleTimeout());
-          }
-        }
+        })();
       }
     }
   });
