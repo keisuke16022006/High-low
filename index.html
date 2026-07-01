@@ -754,6 +754,24 @@ async function submitOnlineGuess(num) {
     const p1HitIndex = p1List.findIndex(g => g.tag === 'hit');
 
     if (tag === 'hit') {
+      // 後攻が当てた。p1のHITが同じ回数目にあるか確認する。
+      // 競合状態を避けるため、p1のHITが見えない場合は最大3回リトライする
+      let p1HitIndex = p1List.findIndex(g => g.tag === 'hit');
+      if (p1HitIndex === -1) {
+        // 先攻のHITがまだ届いていない可能性があるので少し待って再取得
+        for (let i = 0; i < 3; i++) {
+          await new Promise(r => setTimeout(r, 300));
+          const retrySnap = await get(ref(db, `rooms/${roomCode}/guesses/p1`));
+          const retryList = flattenGuesses(retrySnap.val());
+          const retryHitIndex = retryList.findIndex(g => g.tag === 'hit');
+          if (retryHitIndex !== -1) {
+            p1HitIndex = retryHitIndex;
+            p1List.length = 0;
+            retryList.forEach(g => p1List.push(g));
+            break;
+          }
+        }
+      }
       if (p1HitIndex !== -1 && p1HitIndex === myCount - 1) {
         finishOnline('draw', p1List.length, myCount);
       } else {
@@ -763,7 +781,6 @@ async function submitOnlineGuess(num) {
       if (p1HitIndex !== -1 && p1HitIndex === myCount - 1) {
         finishOnline('opponent', p1List.length, myCount);
       } else {
-        alert(`後攻外れ: p1HitIndex=${p1HitIndex} myCount=${myCount} p1List.length=${p1List.length}`);
         clearTimerInterval();
         renderOnlineTurn(false);
       }
