@@ -81,6 +81,33 @@
   .hist-tag.low { background:rgba(105,240,174,0.2); color:var(--low); }
   .hist-tag.hit { background:rgba(255,215,64,0.25); color:var(--correct); }
 
+  /* ターン通知アニメーション */
+  #turn-toast {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.75);
+    color: #fff;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    padding: 14px 28px;
+    border-radius: 12px;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 100;
+  }
+  #turn-toast.show {
+    animation: toastIn 1.8s ease forwards;
+  }
+  @keyframes toastIn {
+    0%   { opacity:0; transform:translate(-50%,-50%) scale(0.85); }
+    20%  { opacity:1; transform:translate(-50%,-50%) scale(1); }
+    70%  { opacity:1; transform:translate(-50%,-50%) scale(1); }
+    100% { opacity:0; transform:translate(-50%,-50%) scale(1.05); }
+  }
+
   .timer-wrap { background:var(--panel); border-top:1px solid var(--border); padding:8px 12px; flex-shrink:0; display:flex; align-items:center; gap:12px; }
   .timer-circle-wrap { flex-shrink:0; position:relative; width:44px; height:44px; }
   .timer-circle-wrap svg { position:absolute; top:0; left:0; transform:rotate(-90deg); }
@@ -219,6 +246,8 @@
   <div class="keypad" id="setup-keypad"></div>
   <button class="confirm-btn" id="setup-confirm" onclick="confirmSecret()" disabled>この数字で決定</button>
 </div>
+
+<div id="turn-toast"></div>
 
 <div class="screen" id="screen-battle">
   <div class="battle-top">
@@ -428,6 +457,7 @@ function startCPUBattle() {
 }
 
 function renderCPUTurn() {
+  showTurnToast(cpuMyTurn);
   const n = document.getElementById('turn-name');
   n.textContent = cpuMyTurn ? 'あなたのターン' : 'CPU が考えています...';
   n.className = 'turn-name ' + (cpuMyTurn ? 'mine' : 'theirs');
@@ -715,7 +745,18 @@ function startOnlineBattle() {
   listenOnlineGuesses();
 }
 
+function showTurnToast(myTurn) {
+  const el = document.getElementById('turn-toast');
+  if (!el) return;
+  el.textContent = myTurn ? 'あなたのターン' : '相手のターン';
+  el.classList.remove('show');
+  void el.offsetWidth; // reflow
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1800);
+}
+
 function renderOnlineTurn(myTurn) {
+  showTurnToast(myTurn);
   const n = document.getElementById('turn-name');
   n.textContent = myTurn ? 'あなたのターン' : '相手のターン...';
   n.className = 'turn-name ' + (myTurn ? 'mine' : 'theirs');
@@ -949,7 +990,7 @@ function buildBattleKeypad(active, onSubmit) {
 function addHistRow(col, num, tag, side) {
   const row = document.createElement('div');
   row.className = `hist-row ${side}`;
-  const tagText = tag === 'hit' ? 'HIT!!' : tag === 'high' ? 'HIGH' : 'LOW';
+  const tagText = tag === 'hit' ? 'HIT!!' : tag === 'high' ? '↑ HIGH' : '↓ LOW';
   const color = side === 'mine' ? 'var(--p1)' : 'var(--p2)';
   row.innerHTML = `<span class="hist-num" style="color:${color}">${num}</span><span class="hist-tag ${tag}">${tagText}</span>`;
   col.appendChild(row);
