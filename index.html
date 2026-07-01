@@ -763,6 +763,7 @@ async function submitOnlineGuess(num) {
       if (p1HitIndex !== -1 && p1HitIndex === myCount - 1) {
         finishOnline('opponent', p1List.length, myCount);
       } else {
+        alert(`後攻外れ: p1HitIndex=${p1HitIndex} myCount=${myCount} p1List.length=${p1List.length}`);
         clearTimerInterval();
         renderOnlineTurn(false);
       }
